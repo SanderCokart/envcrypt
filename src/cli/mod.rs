@@ -7,13 +7,14 @@
 //!
 //! The CLI is typically invoked through the [`run()`] function with command-line arguments.
 
-use clap::{Parser, Subcommand};
+use clap::{ArgAction, Parser, Subcommand};
 
 mod encrypt;
 mod decrypt;
 mod paths;
 mod key_handling;
 mod cipher;
+mod output;
 
 // Re-export public APIs
 pub use paths::derive_output_path;
@@ -25,11 +26,41 @@ pub use decrypt::decrypt_env;
 // Internal use
 use paths::{resolve_encrypt_input_path, resolve_encrypt_output_path, resolve_decrypt_input};
 use key_handling::get_key_arg;
+use output::{OutputConfig, info};
+
+// Version string with release date
+// Release date is read from Cargo.toml [package.metadata.release-date] via build script
+const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), " (", env!("RELEASE_DATE"), ")");
 
 #[derive(Parser)]
 #[command(name = "envcrypt")]
 #[command(about = "Encrypt and decrypt environment files")]
+#[command(version = VERSION)]
 pub struct Cli {
+    /// Do not output any message
+    #[arg(long, global = true)]
+    pub silent: bool,
+
+    /// Overwrite the existing encrypted environment file
+    #[arg(long, global = true)]
+    pub force: bool,
+
+    /// Only errors are displayed. All other output is suppressed
+    #[arg(short = 'q', long, global = true)]
+    pub quiet: bool,
+
+    /// Delete the original environment file (encrypt only)
+    #[arg(long, global = true)]
+    pub prune: bool,
+
+    /// Do not ask any interactive question
+    #[arg(short = 'n', long = "no-interaction", global = true)]
+    pub no_interaction: bool,
+
+    /// Increase the verbosity of messages: 1 for normal output, 2 for more verbose output and 3 for debug
+    #[arg(short = 'v', long, action = ArgAction::Count, global = true)]
+    pub verbose: u8,
+
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -38,7 +69,7 @@ pub struct Cli {
 pub enum Commands {
     /// Encrypt a .env file to .env.encrypted
     Encrypt {
-        /// Cipher to use for encryption (default: AES-256-CBC)
+        /// Cipher to use for encryption
         #[arg(long, default_value = "AES-256-CBC")]
         cipher: String,
         /// Encryption key (will prompt if not provided)
@@ -53,7 +84,7 @@ pub enum Commands {
     },
     /// Decrypt a .env.encrypted file to .env
     Decrypt {
-        /// Cipher to use for decryption (default: AES-256-CBC)
+        /// Cipher to use for decryption
         #[arg(long, default_value = "AES-256-CBC")]
         cipher: String,
         /// Decryption key (will prompt if not provided)
@@ -102,18 +133,33 @@ where
 {
     let cli = Cli::parse_from(args);
 
+    // Create output configuration from global flags
+    let output_config = OutputConfig::new(cli.silent, cli.quiet, cli.verbose);
+
     match cli.command {
         Commands::Encrypt { cipher, key, input, env } => {
             let input_path = resolve_encrypt_input_path(&input, &env);
             let output = resolve_encrypt_output_path(&input_path, &env);
             let key_arg = get_key_arg(&key);
             
-            match encrypt_env(&cipher, key_arg, &input_path, &output) {
+            match encrypt_env(
+                &cipher,
+                key_arg,
+                &input_path,
+                &output,
+                &output_config,
+                cli.force,
+                cli.prune,
+                cli.no_interaction,
+            ) {
                 Ok(used_key) => {
-                    println!("\n⚠️  IMPORTANT: Store this encryption key in a safe place!");
-                    println!("   You will need it to decrypt your .env file later.");
-                    println!("\n   Encryption key: base64:{}", used_key);
-                    println!("\n   This key will not be shown again. Make sure to save it securely.");
+                    // Show key information unless silent
+                    if output_config.should_show_info() {
+                        info(&output_config, "\n⚠️  IMPORTANT: Store this encryption key in a safe place!");
+                        info(&output_config, "   You will need it to decrypt your .env file later.");
+                        info(&output_config, &format!("\n   Encryption key: base64:{}", used_key));
+                        info(&output_config, "\n   This key will not be shown again. Make sure to save it securely.");
+                    }
                     Ok(())
                 }
                 Err(e) => {
@@ -126,8 +172,16 @@ where
             let output = derive_output_path(&input, false);
             let key_arg = get_key_arg(&key);
             
-            decrypt_env(&cipher, key_arg, &input, &output)
-                .map_err(|e| anyhow::anyhow!("{}", e))?;
+            decrypt_env(
+                &cipher,
+                key_arg,
+                &input,
+                &output,
+                &output_config,
+                cli.force,
+                cli.no_interaction,
+            )
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
             Ok(())
         }
     }

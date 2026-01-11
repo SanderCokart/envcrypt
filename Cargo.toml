@@ -3,6 +3,9 @@ name = "envcrypt"
 version = "0.1.0"
 edition = "2021"
 
+[package.metadata]
+release-date = "2026-01-11"
+
 [lib]
 name = "envcrypt"
 path = "src/lib.rs"

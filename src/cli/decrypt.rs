@@ -9,6 +9,7 @@ use crate::cipher::CipherError;
 use crate::key::derive_keys;
 use crate::cli::cipher::get_cipher;
 use crate::cli::key_handling::get_encryption_key;
+use crate::cli::output::{OutputConfig, info, verbose, debug};
 
 /// Decrypts an encrypted environment file using the specified cipher and key.
 ///
@@ -18,10 +19,13 @@ use crate::cli::key_handling::get_encryption_key;
 /// # Arguments
 ///
 /// * `cipher_name` - Name of the cipher to use (must match the cipher used for encryption)
-/// * `key_arg` - Optional decryption key. If `None`, the user will be prompted.
+/// * `key_arg` - Optional decryption key. If `None`, the user will be prompted (unless `no_interaction` is true).
 ///               Keys can include the "base64:" prefix which will be stripped.
 /// * `input_path` - Path to the encrypted file (typically `.env.encrypted`)
 /// * `output_path` - Path where the decrypted `.env` file will be written
+/// * `output_config` - Output configuration for verbosity control
+/// * `force` - If `true`, overwrite existing output file without error
+/// * `no_interaction` - If `true`, skip interactive prompts (error if key not provided)
 ///
 /// # Returns
 ///
@@ -31,6 +35,7 @@ use crate::cli::key_handling::get_encryption_key;
 ///
 /// Returns an error string if:
 /// - The input file doesn't exist
+/// - The output file exists and `force` is `false`
 /// - File I/O operations fail
 /// - The cipher name is unsupported
 /// - The encrypted file format is invalid
@@ -52,12 +57,21 @@ use crate::cli::key_handling::get_encryption_key;
 /// # Example
 ///
 /// ```no_run
-/// use envcrypt::cli::decrypt_env;
+/// use envcrypt::cli::{decrypt_env, output::OutputConfig};
 ///
-/// decrypt_env("AES-256-CBC", Some("my-key"), ".env.encrypted", ".env")?;
+/// let output_config = OutputConfig::new(false, false, 0);
+/// decrypt_env("AES-256-CBC", Some("my-key"), ".env.encrypted", ".env", &output_config, false, false)?;
 /// # Ok::<(), String>(())
 /// ```
-pub fn decrypt_env(cipher_name: &str, key_arg: Option<&str>, input_path: &str, output_path: &str) -> Result<(), String> {
+pub fn decrypt_env(
+    cipher_name: &str,
+    key_arg: Option<&str>,
+    input_path: &str,
+    output_path: &str,
+    output_config: &OutputConfig,
+    force: bool,
+    no_interaction: bool,
+) -> Result<(), String> {
     let encrypted_path = Path::new(input_path);
     let env_path = Path::new(output_path);
 
@@ -65,8 +79,18 @@ pub fn decrypt_env(cipher_name: &str, key_arg: Option<&str>, input_path: &str, o
         return Err(format!("{} file not found", input_path));
     }
 
+    // Check if output file exists and handle --force flag
+    if env_path.exists() && !force {
+        return Err(format!("Output file {} already exists. Use --force to overwrite.", output_path));
+    }
+
+    debug(output_config, &format!("Starting decryption: {} -> {}", input_path, output_path));
+    debug(output_config, &format!("Cipher: {}", cipher_name));
+    verbose(output_config, &format!("Input file: {}", input_path));
+    verbose(output_config, &format!("Output file: {}", output_path));
+
     // Get decryption key
-    let key_input = get_encryption_key(key_arg, false)?;
+    let key_input = get_encryption_key(key_arg, false, no_interaction)?;
     
     // Get cipher
     let cipher = get_cipher(cipher_name)?;
@@ -112,9 +136,10 @@ pub fn decrypt_env(cipher_name: &str, key_arg: Option<&str>, input_path: &str, o
         .map_err(|e| format!("Decrypted data is not valid UTF-8: {}", e))?;
     
     // Write decrypted file
+    debug(output_config, "Writing decrypted data to file");
     fs::write(env_path, plaintext_str)
         .map_err(|e| format!("Error writing {}: {}", output_path, e))?;
     
-    println!("Successfully decrypted {} to {}", input_path, output_path);
+    info(output_config, &format!("Successfully decrypted {} to {}", input_path, output_path));
     Ok(())
 }

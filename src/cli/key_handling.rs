@@ -106,20 +106,32 @@ fn get_decrypt_key() -> Result<String, String> {
 ///
 /// * `key_arg` - Optional key provided via command-line flag
 /// * `is_encrypt` - `true` for encryption, `false` for decryption
+/// * `no_interaction` - If `true`, skip interactive prompts. For encryption, auto-generate key if not provided. For decryption, error if key not provided.
 ///
 /// # Returns
 ///
 /// Returns the key string, or an error if key input fails.
-pub fn get_encryption_key(key_arg: Option<&str>, is_encrypt: bool) -> Result<String, String> {
+pub fn get_encryption_key(key_arg: Option<&str>, is_encrypt: bool, no_interaction: bool) -> Result<String, String> {
     // If key was provided via flag, use it
     if let Some(key) = key_arg {
         return Ok(strip_base64_prefix(key.trim()).to_string());
     }
     
-    if is_encrypt {
-        get_encrypt_key_with_menu()
+    if no_interaction {
+        if is_encrypt {
+            // Auto-generate new key for encryption
+            let key = generate_base64_key();
+            Ok(key)
+        } else {
+            // For decryption, cannot proceed without key
+            Err("Decryption key is required when using --no-interaction. Please provide --key".to_string())
+        }
     } else {
-        get_decrypt_key()
+        if is_encrypt {
+            get_encrypt_key_with_menu()
+        } else {
+            get_decrypt_key()
+        }
     }
 }
 

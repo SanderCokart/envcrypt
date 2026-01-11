@@ -8,3 +8,4 @@ pub mod paths;
 pub mod env_flag;
 pub mod keys;
 pub mod errors;
+pub mod flags;
