@@ -27,6 +27,9 @@ enum Commands {
         /// Encryption key (will prompt if not provided)
         #[arg(long)]
         key: Option<String>,
+        /// Input .env file path (default: .env)
+        #[arg(long, default_value = ".env")]
+        input: String,
     },
     /// Decrypt a .env.encrypted file to .env
     Decrypt {
@@ -36,6 +39,9 @@ enum Commands {
         /// Decryption key (will prompt if not provided)
         #[arg(long)]
         key: Option<String>,
+        /// Input .env.encrypted file path (default: .env.encrypted)
+        #[arg(long, default_value = ".env.encrypted")]
+        input: String,
     },
 }
 
@@ -43,8 +49,9 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Encrypt { cipher, key } => {
-            match encrypt_env(&cipher, key.as_deref()) {
+        Commands::Encrypt { cipher, key, input } => {
+            let output = derive_output_path(&input, true);
+            match encrypt_env(&cipher, key.as_deref(), &input, &output) {
                 Ok(used_key) => {
                     println!("\n⚠️  IMPORTANT: Store this encryption key in a safe place!");
                     println!("   You will need it to decrypt your .env file later.");
@@ -57,8 +64,9 @@ fn main() {
                 }
             }
         }
-        Commands::Decrypt { cipher, key } => {
-            if let Err(e) = decrypt_env(&cipher, key.as_deref()) {
+        Commands::Decrypt { cipher, key, input } => {
+            let output = derive_output_path(&input, false);
+            if let Err(e) = decrypt_env(&cipher, key.as_deref(), &input, &output) {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
@@ -146,12 +154,33 @@ fn get_cipher(cipher_name: &str) -> Result<Box<dyn Cipher>, String> {
     }
 }
 
-fn encrypt_env(cipher_name: &str, key_arg: Option<&str>) -> Result<String, String> {
-    let env_path = Path::new(".env");
-    let encrypted_path = Path::new(".env.encrypted");
+fn derive_output_path(input_path: &str, is_encrypt: bool) -> String {
+    if is_encrypt {
+        // For encryption: .env -> .env.encrypted
+        if input_path.ends_with(".env") {
+            input_path.replace(".env", ".env.encrypted")
+        } else {
+            format!("{}.encrypted", input_path)
+        }
+    } else {
+        // For decryption: .env.encrypted -> .env
+        if input_path.ends_with(".env.encrypted") {
+            input_path.replace(".env.encrypted", ".env")
+        } else if input_path.ends_with(".encrypted") {
+            input_path.strip_suffix(".encrypted").unwrap_or(input_path).to_string()
+        } else {
+            // Fallback: return input as-is (shouldn't happen in normal usage)
+            input_path.to_string()
+        }
+    }
+}
+
+fn encrypt_env(cipher_name: &str, key_arg: Option<&str>, input_path: &str, output_path: &str) -> Result<String, String> {
+    let env_path = Path::new(input_path);
+    let encrypted_path = Path::new(output_path);
 
     if !env_path.exists() {
-        return Err(".env file not found".to_string());
+        return Err(format!("{} file not found", input_path));
     }
 
     // Get encryption key
@@ -162,7 +191,7 @@ fn encrypt_env(cipher_name: &str, key_arg: Option<&str>) -> Result<String, Strin
     
     // Read plaintext
     let plaintext = fs::read_to_string(env_path)
-        .map_err(|e| format!("Error reading .env file: {}", e))?;
+        .map_err(|e| format!("Error reading {} file: {}", input_path, e))?;
     
     // Generate salt for key derivation
     let salt = generate_salt();
@@ -183,18 +212,18 @@ fn encrypt_env(cipher_name: &str, key_arg: Option<&str>) -> Result<String, Strin
     
     // Write encrypted file
     fs::write(encrypted_path, final_output)
-        .map_err(|e| format!("Error writing .env.encrypted: {}", e))?;
+        .map_err(|e| format!("Error writing {}: {}", output_path, e))?;
     
-    println!("\nSuccessfully encrypted .env to .env.encrypted");
+    println!("\nSuccessfully encrypted {} to {}", input_path, output_path);
     Ok(key_input)
 }
 
-fn decrypt_env(cipher_name: &str, key_arg: Option<&str>) -> Result<(), String> {
-    let encrypted_path = Path::new(".env.encrypted");
-    let env_path = Path::new(".env");
+fn decrypt_env(cipher_name: &str, key_arg: Option<&str>, input_path: &str, output_path: &str) -> Result<(), String> {
+    let encrypted_path = Path::new(input_path);
+    let env_path = Path::new(output_path);
 
     if !encrypted_path.exists() {
-        return Err(".env.encrypted file not found".to_string());
+        return Err(format!("{} file not found", input_path));
     }
 
     // Get decryption key
@@ -205,7 +234,7 @@ fn decrypt_env(cipher_name: &str, key_arg: Option<&str>) -> Result<(), String> {
     
     // Read encrypted file
     let encrypted_content = fs::read_to_string(encrypted_path)
-        .map_err(|e| format!("Error reading .env.encrypted file: {}", e))?;
+        .map_err(|e| format!("Error reading {} file: {}", input_path, e))?;
     
     // Decode base64
     let data = base64::engine::general_purpose::STANDARD.decode(encrypted_content.trim())
@@ -238,8 +267,8 @@ fn decrypt_env(cipher_name: &str, key_arg: Option<&str>) -> Result<(), String> {
     
     // Write decrypted file
     fs::write(env_path, plaintext_str)
-        .map_err(|e| format!("Error writing .env file: {}", e))?;
+        .map_err(|e| format!("Error writing {}: {}", output_path, e))?;
     
-    println!("Successfully decrypted .env.encrypted to .env");
+    println!("Successfully decrypted {} to {}", input_path, output_path);
     Ok(())
 }
