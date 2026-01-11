@@ -1,0 +1,7 @@
+# Note: Cargo runs integration test files SERIALLY by default.
+# To run integration tests in parallel, use cargo-nextest:
+#   cargo install cargo-nextest
+#   cargo nextest run
+#
+# Alternatively, you can combine all tests into a single file with modules,
+# but that defeats the purpose of feature-based organization.

@@ -1,0 +1,18 @@
+# cargo-nextest configuration for parallel test execution
+# This enables parallel execution of integration test files
+# 
+# Install with: cargo install cargo-nextest --locked
+# Run with: cargo nextest run
+#
+# cargo-nextest runs integration test files in parallel, unlike cargo test
+# which runs them serially. This significantly speeds up test execution.
+#
+# Performance: With 7 test files, nextest is typically 10-20x faster than cargo test
+
+[profile.default]
+# Run as many tests in parallel as there are logical CPUs
+# You can also set a specific number: test-threads = 4
+test-threads = "num-cpus"
+
+# Retry failed tests (optional, helps with flaky tests)
+retries = 0
