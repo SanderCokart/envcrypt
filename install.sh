@@ -5,7 +5,8 @@
 
 set -euo pipefail
 
-BIN_DIR="$HOME/.bin"
+ENVCRYPT_HOME="$HOME/.envcrypt"
+BIN_DIR="$ENVCRYPT_HOME/bin"
 INSTALL_PATH="$BIN_DIR/envcrypt"
 
 # Helper function to show paths with ~
@@ -67,10 +68,12 @@ remove_path_config() {
     # Remove the comment line and the PATH export line
     if [ "$shell_name" = "fish" ]; then
         # For fish shell, remove the envcrypt section
-        sed -i '/# envcrypt/,/set --export PATH.*\.bin/d' "$config_file"
+        sed -i '/# envcrypt/,/set --export PATH.*ENVCRYPT_HOME/d' "$config_file"
+        sed -i '/export ENVCRYPT_HOME/d' "$config_file"
     else
         # For bash/zsh, remove the envcrypt section
-        sed -i '/# envcrypt/,/export PATH.*\.bin/d' "$config_file"
+        sed -i '/# envcrypt/,/export PATH.*ENVCRYPT_HOME/d' "$config_file"
+        sed -i '/export ENVCRYPT_HOME/d' "$config_file"
     fi
 }
 
@@ -80,11 +83,21 @@ uninstall() {
     
     echo "Uninstalling envcrypt..."
     
-    # Remove binary
+    # Remove binary and directory if empty
     if [ -f "$INSTALL_PATH" ]; then
         rm "$INSTALL_PATH"
         tilde_exe=$(tildify "$INSTALL_PATH")
         echo "✓ Removed $tilde_exe"
+        
+        # Remove bin directory if empty
+        if [ -d "$BIN_DIR" ] && [ -z "$(ls -A "$BIN_DIR" 2>/dev/null)" ]; then
+            rmdir "$BIN_DIR" 2>/dev/null || true
+        fi
+        
+        # Remove .envcrypt directory if empty
+        if [ -d "$ENVCRYPT_HOME" ] && [ -z "$(ls -A "$ENVCRYPT_HOME" 2>/dev/null)" ]; then
+            rmdir "$ENVCRYPT_HOME" 2>/dev/null || true
+        fi
     else
         tilde_exe=$(tildify "$INSTALL_PATH")
         echo "⚠️  Binary not found at $tilde_exe"
@@ -115,10 +128,10 @@ install() {
     # Build the release version
     cargo build --release
     
-    # Create ~/.bin directory if it doesn't exist
+    # Create ~/.envcrypt/bin directory if it doesn't exist
     mkdir -p "$BIN_DIR"
     
-    # Copy the binary to ~/.bin/envcrypt
+    # Copy the binary to ~/.envcrypt/bin/envcrypt
     BINARY_PATH="target/release/envcrypt"
     
     if [ ! -f "$BINARY_PATH" ]; then
@@ -133,6 +146,10 @@ install() {
     tilde_exe=$(tildify "$INSTALL_PATH")
     echo "✓ envcrypt was installed successfully to $tilde_exe"
     
+    # Add to PATH in current session immediately
+    export ENVCRYPT_HOME
+    export PATH="$BIN_DIR:$PATH"
+    
     # Check if envcrypt is already available in PATH
     if command -v envcrypt >/dev/null 2>&1; then
         echo ""
@@ -140,12 +157,13 @@ install() {
         exit 0
     fi
     
-    # Automatically add ~/.bin to PATH
+    # Automatically add ~/.envcrypt/bin to PATH
     CONFIG_FILE=$(detect_shell_config)
     SHELL_NAME=$(basename "$SHELL" 2>/dev/null || echo "bash")
     refresh_command=''
     tilde_config=$(tildify "$CONFIG_FILE")
-    tilde_bin_dir=$(tildify "$BIN_DIR")
+    tilde_home=$(tildify "$ENVCRYPT_HOME")
+    quoted_home="${ENVCRYPT_HOME//\"/\\\"}"
     
     # Check if PATH export already exists in config file
     if [ -f "$CONFIG_FILE" ] && grep -q "# envcrypt" "$CONFIG_FILE" 2>/dev/null; then
@@ -158,22 +176,26 @@ install() {
                 {
                     echo ""
                     echo "# envcrypt"
-                    echo 'set --export PATH "$HOME/.bin" $PATH'
+                    echo "set --export ENVCRYPT_HOME \"$quoted_home\""
+                    echo "set --export PATH \"\$ENVCRYPT_HOME/bin\" \$PATH"
                 } >> "$CONFIG_FILE"
             else
                 {
                     echo ""
                     echo "# envcrypt"
-                    echo 'export PATH="$HOME/.bin:$PATH"'
+                    echo "export ENVCRYPT_HOME=\"$quoted_home\""
+                    echo "export PATH=\"\$ENVCRYPT_HOME/bin:\$PATH\""
                 } >> "$CONFIG_FILE"
             fi
-            echo "Added \"$tilde_bin_dir\" to \$PATH in \"$tilde_config\""
+            echo "Added \"$tilde_home/bin\" to \$PATH in \"$tilde_config\""
         else
             echo "Manually add the directory to $tilde_config (or similar):"
             if [ "$SHELL_NAME" = "fish" ]; then
-                echo "  set --export PATH \"\$HOME/.bin\" \$PATH"
+                echo "  set --export ENVCRYPT_HOME \"\$HOME/.envcrypt\""
+                echo "  set --export PATH \"\$ENVCRYPT_HOME/bin\" \$PATH"
             else
-                echo "  export PATH=\"\$HOME/.bin:\$PATH\""
+                echo "  export ENVCRYPT_HOME=\"\$HOME/.envcrypt\""
+                echo "  export PATH=\"\$ENVCRYPT_HOME/bin:\$PATH\""
             fi
         fi
     fi
