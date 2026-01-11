@@ -17,32 +17,92 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Commands {
     /// Encrypt a .env file to .env.encrypted
+    #[cfg(feature = "encrypt")]
     Encrypt {
         /// Cipher to use for encryption (default: AES-256-CBC)
         #[arg(long, default_value = "AES-256-CBC")]
         cipher: String,
         /// Encryption key (will prompt if not provided)
-        #[arg(long)]
+        #[cfg_attr(feature = "key-flag", arg(long))]
+        #[cfg_attr(not(feature = "key-flag"), arg(skip))]
         key: Option<String>,
         /// Input .env file path (default: .env, or .env.{env} if --env is specified)
-        #[arg(long)]
+        #[cfg_attr(feature = "input-flag", arg(long))]
+        #[cfg_attr(not(feature = "input-flag"), arg(skip))]
         input: Option<String>,
         /// Environment name (e.g., local, production, development). When specified, defaults input to .env.{env} and output to .env.{env}.encrypted
-        #[arg(long)]
+        #[cfg_attr(feature = "env-flag", arg(long))]
+        #[cfg_attr(not(feature = "env-flag"), arg(skip))]
         env: Option<String>,
     },
     /// Decrypt a .env.encrypted file to .env
+    #[cfg(feature = "decrypt")]
     Decrypt {
         /// Cipher to use for decryption (default: AES-256-CBC)
         #[arg(long, default_value = "AES-256-CBC")]
         cipher: String,
         /// Decryption key (will prompt if not provided)
-        #[arg(long)]
+        #[cfg_attr(feature = "key-flag", arg(long))]
+        #[cfg_attr(not(feature = "key-flag"), arg(skip))]
         key: Option<String>,
         /// Input .env.encrypted file path (default: .env.encrypted)
-        #[arg(long, default_value = ".env.encrypted")]
+        #[cfg_attr(feature = "input-flag", arg(long, default_value = ".env.encrypted"))]
+        #[cfg_attr(not(feature = "input-flag"), arg(skip))]
         input: String,
     },
+}
+
+// Helper functions to handle conditional feature logic
+#[cfg(feature = "encrypt")]
+fn resolve_encrypt_input_path(input: &Option<String>, env: &Option<String>) -> String {
+    #[cfg(feature = "input-flag")]
+    if let Some(input) = input {
+        return input.clone();
+    }
+    
+    #[cfg(feature = "env-flag")]
+    if let Some(env_name) = env {
+        return format!(".env.{}", env_name);
+    }
+    
+    ".env".to_string()
+}
+
+#[cfg(feature = "encrypt")]
+fn resolve_encrypt_output_path(input_path: &str, env: &Option<String>) -> String {
+    #[cfg(feature = "env-flag")]
+    if let Some(env_name) = env {
+        let input_path_buf = PathBuf::from(input_path);
+        let output_filename = format!(".env.{}.encrypted", env_name);
+        
+        if let Some(parent_dir) = input_path_buf.parent() {
+            return parent_dir.join(&output_filename).to_string_lossy().to_string();
+        } else {
+            return output_filename;
+        }
+    }
+    
+    derive_output_path(input_path, true)
+}
+
+fn get_key_arg(key: &Option<String>) -> Option<&str> {
+    #[cfg(feature = "key-flag")]
+    return key.as_deref();
+    
+    #[cfg(not(feature = "key-flag"))]
+    None
+}
+
+#[cfg(feature = "decrypt")]
+fn resolve_decrypt_input(input: String) -> String {
+    #[cfg(feature = "input-flag")]
+    {
+        input
+    }
+    #[cfg(not(feature = "input-flag"))]
+    {
+        ".env.encrypted".to_string()
+    }
 }
 
 pub fn run<I>(args: I) -> anyhow::Result<()>
@@ -52,34 +112,13 @@ where
     let cli = Cli::parse_from(args);
 
     match cli.command {
+        #[cfg(feature = "encrypt")]
         Commands::Encrypt { cipher, key, input, env } => {
-            // Determine input path: use explicit input if provided, otherwise .env.{env} or .env
-            let input_path = if let Some(input) = input {
-                input
-            } else if let Some(env_name) = &env {
-                format!(".env.{}", env_name)
-            } else {
-                ".env".to_string()
-            };
+            let input_path = resolve_encrypt_input_path(&input, &env);
+            let output = resolve_encrypt_output_path(&input_path, &env);
+            let key_arg = get_key_arg(&key);
             
-            // Determine output path: if --env is provided, use .env.{env}.encrypted in the same directory as input
-            // Otherwise, derive from input path
-            let output = if let Some(env_name) = &env {
-                let input_path_buf = PathBuf::from(&input_path);
-                let parent = input_path_buf.parent();
-                let output_filename = format!(".env.{}.encrypted", env_name);
-                
-                if let Some(parent_dir) = parent {
-                    // Input has a directory component, preserve it
-                    parent_dir.join(&output_filename).to_string_lossy().to_string()
-                } else {
-                    // Input is just a filename, output in current directory
-                    output_filename
-                }
-            } else {
-                derive_output_path(&input_path, true)
-            };
-            match encrypt_env(&cipher, key.as_deref(), &input_path, &output) {
+            match encrypt_env(&cipher, key_arg, &input_path, &output) {
                 Ok(used_key) => {
                     println!("\n⚠️  IMPORTANT: Store this encryption key in a safe place!");
                     println!("   You will need it to decrypt your .env file later.");
@@ -92,20 +131,26 @@ where
                 }
             }
         }
+        #[cfg(feature = "decrypt")]
         Commands::Decrypt { cipher, key, input } => {
+            let input = resolve_decrypt_input(input);
             let output = derive_output_path(&input, false);
-            decrypt_env(&cipher, key.as_deref(), &input, &output)
+            let key_arg = get_key_arg(&key);
+            
+            decrypt_env(&cipher, key_arg, &input, &output)
                 .map_err(|e| anyhow::anyhow!("{}", e))?;
             Ok(())
         }
     }
 }
 
+#[cfg(all(feature = "encrypt", not(feature = "key-flag")))]
 enum KeyChoice {
     GenerateNew,
     UseCustom,
 }
 
+#[cfg(all(feature = "encrypt", not(feature = "key-flag")))]
 fn show_key_menu() -> Result<KeyChoice, String> {
     use std::io::{self, Write};
     
@@ -130,6 +175,7 @@ fn show_key_menu() -> Result<KeyChoice, String> {
     }
 }
 
+#[cfg(feature = "encrypt")]
 fn generate_base64_key() -> String {
     use rand::RngCore;
     // Generate 32 random bytes (256 bits) and encode as base64
@@ -142,12 +188,10 @@ pub fn strip_base64_prefix(key: &str) -> &str {
     key.strip_prefix("base64:").unwrap_or(key)
 }
 
-fn get_encryption_key(key_arg: Option<&str>, is_encrypt: bool) -> Result<String, String> {
-    if let Some(key) = key_arg {
-        // Strip "base64:" prefix if present and trim whitespace
-        Ok(strip_base64_prefix(key.trim()).to_string())
-    } else if is_encrypt {
-        // Show menu for encryption
+#[cfg(feature = "encrypt")]
+fn get_encrypt_key_with_menu() -> Result<String, String> {
+    #[cfg(not(feature = "key-flag"))]
+    {
         match show_key_menu()? {
             KeyChoice::GenerateNew => {
                 let key = generate_base64_key();
@@ -161,20 +205,46 @@ fn get_encryption_key(key_arg: Option<&str>, is_encrypt: bool) -> Result<String,
                 
                 let key = rpassword::read_password()
                     .map_err(|e| format!("Failed to read password: {}", e))?;
-                // Strip "base64:" prefix and trim whitespace
                 Ok(strip_base64_prefix(key.trim()).to_string())
             }
         }
+    }
+    #[cfg(feature = "key-flag")]
+    {
+        let key = generate_base64_key();
+        println!("\nGenerated new encryption key");
+        Ok(key)
+    }
+}
+
+fn get_decrypt_key() -> Result<String, String> {
+    print!("Enter decryption key: ");
+    use std::io::Write;
+    std::io::stdout().flush().map_err(|e| format!("Failed to flush stdout: {}", e))?;
+    
+    let key = rpassword::read_password()
+        .map_err(|e| format!("Failed to read password: {}", e))?;
+    Ok(strip_base64_prefix(key.trim()).to_string())
+}
+
+fn get_encryption_key(key_arg: Option<&str>, is_encrypt: bool) -> Result<String, String> {
+    // If key was provided via flag, use it
+    #[cfg(feature = "key-flag")]
+    if let Some(key) = key_arg {
+        return Ok(strip_base64_prefix(key.trim()).to_string());
+    }
+    
+    if is_encrypt {
+        #[cfg(feature = "encrypt")]
+        {
+            get_encrypt_key_with_menu()
+        }
+        #[cfg(not(feature = "encrypt"))]
+        {
+            unreachable!("encrypt feature required")
+        }
     } else {
-        // For decryption, just prompt for key
-        print!("Enter decryption key: ");
-        use std::io::Write;
-        std::io::stdout().flush().map_err(|e| format!("Failed to flush stdout: {}", e))?;
-        
-        let key = rpassword::read_password()
-            .map_err(|e| format!("Failed to read password: {}", e))?;
-        // Strip "base64:" prefix and trim whitespace
-        Ok(strip_base64_prefix(key.trim()).to_string())
+        get_decrypt_key()
     }
 }
 
@@ -214,6 +284,7 @@ pub fn derive_output_path(input_path: &str, is_encrypt: bool) -> String {
     }
 }
 
+#[cfg(feature = "encrypt")]
 pub fn encrypt_env(cipher_name: &str, key_arg: Option<&str>, input_path: &str, output_path: &str) -> Result<String, String> {
     let env_path = Path::new(input_path);
     let encrypted_path = Path::new(output_path);
@@ -257,6 +328,7 @@ pub fn encrypt_env(cipher_name: &str, key_arg: Option<&str>, input_path: &str, o
     Ok(key_input)
 }
 
+#[cfg(feature = "decrypt")]
 pub fn decrypt_env(cipher_name: &str, key_arg: Option<&str>, input_path: &str, output_path: &str) -> Result<(), String> {
     let encrypted_path = Path::new(input_path);
     let env_path = Path::new(output_path);

@@ -11,19 +11,31 @@ path = "src/lib.rs"
 name = "envcrypt"
 path = "src/main.rs"
 
+[features]
+default = ["cipher", "encrypt", "decrypt", "key-flag", "env-flag", "input-flag"]
+cipher = ["dep:aes", "dep:cbc", "dep:cipher", "dep:hmac", "dep:sha2", "dep:pbkdf2", "dep:rand", "dep:base64", "dep:generic-array"]
+encrypt = ["cipher", "dep:clap", "dep:rpassword", "dep:anyhow"]
+decrypt = ["cipher", "dep:clap", "dep:rpassword", "dep:anyhow"]
+key-flag = ["dep:rpassword"]
+env-flag = []
+input-flag = []
+
 [dependencies]
-clap = { version = "4.5", features = ["derive"] }
-aes = "0.8"
-cbc = "0.1"
-cipher = "0.4"
-hmac = "0.12"
-sha2 = "0.10"
-pbkdf2 = "0.12"
-rand = "0.8"
-base64 = "0.21"
-rpassword = "7.0"
-generic-array = "0.14"
-anyhow = "1.0"
+# CLI dependencies (optional, enabled by "cli" feature)
+clap = { version = "4.5", features = ["derive"], optional = true }
+rpassword = { version = "7.0", optional = true }
+anyhow = { version = "1.0", optional = true }
+
+# Cipher dependencies (optional, enabled by "cipher" feature)
+aes = { version = "0.8", optional = true }
+cbc = { version = "0.1", optional = true }
+cipher = { version = "0.4", optional = true }
+hmac = { version = "0.12", optional = true }
+sha2 = { version = "0.10", optional = true }
+pbkdf2 = { version = "0.12", optional = true }
+rand = { version = "0.8", optional = true }
+base64 = { version = "0.21", optional = true }
+generic-array = { version = "0.14", optional = true }
 
 [dev-dependencies]
 assert_cmd = "2.0"
