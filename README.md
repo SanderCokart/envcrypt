@@ -14,6 +14,9 @@ A secure command-line tool for encrypting and decrypting environment files using
 - **Key Zeroization**: Automatic memory clearing of sensitive keys
 - **Environment Support**: Support for multiple environments (local, production, etc.)
 - **Flexible Paths**: Custom input/output paths
+- **Verbosity Control**: Multiple output levels (`--silent`, `--quiet`, `--verbose`)
+- **Non-Interactive Mode**: `--no-interaction` flag for automated workflows
+- **File Management**: `--force` to overwrite files, `--prune` to delete originals after encryption
 - **Feature Flags**: Modular compilation with optional features
 
 ## Installation
@@ -105,6 +108,27 @@ Decrypts `.env.encrypted` to `.env` by default.
 
 ### Command-Line Options
 
+#### Global Options
+
+These options apply to both `encrypt` and `decrypt` commands:
+
+- `--silent`: Do not output any message (suppresses all output including errors)
+- `--force`: Overwrite existing encrypted/decrypted files without prompting
+- `-q, --quiet`: Only errors are displayed. All other output is suppressed
+- `-n, --no-interaction`: Do not ask any interactive question
+  - For encryption: Automatically generates a new key if `--key` is not provided
+  - For decryption: Requires `--key` to be provided (will error if missing)
+- `-v, --verbose`: Increase the verbosity of messages
+  - `-v`: Normal output (level 1)
+  - `-vv`: More verbose output (level 2)
+  - `-vvv`: Debug output (level 3)
+- `-V, --version`: Display application version with release date
+
+**Flag Precedence:**
+- `--silent` overrides `--quiet` and `--verbose` (suppresses all output)
+- `--quiet` suppresses info/verbose/debug messages but shows errors
+- Verbosity levels increase detail: `-v` (normal) < `-vv` (verbose) < `-vvv` (debug)
+
 #### Encryption Options
 
 ```bash
@@ -112,11 +136,12 @@ envcrypt encrypt [OPTIONS]
 ```
 
 - `--cipher <CIPHER>`: Cipher to use (default: `AES-256-CBC`)
-- `--key <KEY>`: Encryption key (if not provided, will prompt)
+- `--key <KEY>`: Encryption key (if not provided, will prompt unless `--no-interaction` is used)
 - `--input <PATH>`: Input file path (default: `.env`, or `.env.{env}` if `--env` is specified)
 - `--env <ENV>`: Environment name (e.g., `local`, `production`). When specified:
   - Default input: `.env.{env}`
   - Default output: `.env.{env}.encrypted`
+- `--prune`: Delete the original `.env` file after successful encryption (encrypt only)
 
 #### Decryption Options
 
@@ -125,7 +150,7 @@ envcrypt decrypt [OPTIONS]
 ```
 
 - `--cipher <CIPHER>`: Cipher to use (default: `AES-256-CBC`)
-- `--key <KEY>`: Decryption key (if not provided, will prompt)
+- `--key <KEY>`: Decryption key (if not provided, will prompt unless `--no-interaction` is used)
 - `--input <PATH>`: Input encrypted file path (default: `.env.encrypted`)
 
 ### Examples
@@ -161,6 +186,66 @@ envcrypt decrypt --key "my-secret-key"
 ```bash
 envcrypt decrypt --input .env.production.encrypted --key "my-key"
 # Decrypts to .env.production
+```
+
+#### Non-Interactive Encryption
+
+```bash
+envcrypt encrypt --no-interaction
+# Automatically generates a new key without prompting
+```
+
+#### Non-Interactive Decryption
+
+```bash
+envcrypt decrypt --no-interaction --key "my-secret-key"
+# Decrypts without prompting (key must be provided)
+```
+
+#### Force Overwrite Existing Files
+
+```bash
+envcrypt encrypt --force
+# Overwrites .env.encrypted if it already exists
+
+envcrypt decrypt --force
+# Overwrites .env if it already exists
+```
+
+#### Prune Original File After Encryption
+
+```bash
+envcrypt encrypt --prune
+# Encrypts .env to .env.encrypted and deletes the original .env file
+```
+
+#### Quiet Mode (Errors Only)
+
+```bash
+envcrypt encrypt --quiet
+# Only shows errors, suppresses all other output
+```
+
+#### Silent Mode (No Output)
+
+```bash
+envcrypt encrypt --silent
+# Suppresses all output including errors
+```
+
+#### Verbose Output
+
+```bash
+envcrypt encrypt -v      # Normal verbose output
+envcrypt encrypt -vv      # More verbose output
+envcrypt encrypt -vvv     # Debug output
+```
+
+#### Display Version
+
+```bash
+envcrypt --version
+# Output: envcrypt 0.1.0 (2026-01-11)
 ```
 
 ### Key Format
@@ -251,6 +336,7 @@ Tests are organized by feature:
 - `tests/cli_tests/paths.rs` - Custom path and `--input` flag tests
 - `tests/cli_tests/keys.rs` - Key parsing tests (base64 prefix, whitespace)
 - `tests/cli_tests/env_flag.rs` - `--env` flag tests
+- `tests/cli_tests/flags.rs` - Global flags tests (`--silent`, `--force`, `--quiet`, `--prune`, `--no-interaction`, `--verbose`, `--version`)
 - `tests/cli_tests/errors.rs` - Error condition tests
 - `tests/common/mod.rs` - Shared test utilities
 
