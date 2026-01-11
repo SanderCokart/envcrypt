@@ -293,3 +293,111 @@ fn test_decrypt_with_nonexistent_input_fails() {
         .failure()
         .stderr(predicates::str::contains("file not found"));
 }
+
+#[test]
+fn test_decrypt_with_base64_prefix() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let env_path = temp_dir.path().join(".env");
+    // Create and encrypt a file
+    let original_content = "APP_KEY=test123\nDB_PASSWORD=secret456";
+    fs::write(&env_path, original_content).unwrap();
+
+    // Encrypt with key
+    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("envcrypt"));
+    cmd.current_dir(temp_dir.path())
+        .arg("encrypt")
+        .arg("--key")
+        .arg(TEST_KEY)
+        .assert()
+        .success();
+
+    // Delete the original .env file to test decryption
+    fs::remove_file(&env_path).unwrap();
+
+    // Decrypt with key that has "base64:" prefix (simulating user copying the displayed key)
+    let key_with_prefix = format!("base64:{}", TEST_KEY);
+    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("envcrypt"));
+    cmd.current_dir(temp_dir.path())
+        .arg("decrypt")
+        .arg("--key")
+        .arg(&key_with_prefix)
+        .assert()
+        .success();
+
+    // Verify .env was recreated with original content
+    assert!(env_path.exists());
+    let decrypted_content = fs::read_to_string(&env_path).unwrap();
+    assert_eq!(decrypted_content, original_content);
+}
+
+#[test]
+fn test_decrypt_with_key_whitespace() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let env_path = temp_dir.path().join(".env");
+    // Create and encrypt a file
+    let original_content = "APP_KEY=test123\nDB_PASSWORD=secret456";
+    fs::write(&env_path, original_content).unwrap();
+
+    // Encrypt with key
+    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("envcrypt"));
+    cmd.current_dir(temp_dir.path())
+        .arg("encrypt")
+        .arg("--key")
+        .arg(TEST_KEY)
+        .assert()
+        .success();
+
+    // Delete the original .env file to test decryption
+    fs::remove_file(&env_path).unwrap();
+
+    // Decrypt with key that has whitespace (simulating user copying with extra spaces)
+    let key_with_whitespace = format!("  {}  ", TEST_KEY);
+    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("envcrypt"));
+    cmd.current_dir(temp_dir.path())
+        .arg("decrypt")
+        .arg("--key")
+        .arg(&key_with_whitespace)
+        .assert()
+        .success();
+
+    // Verify .env was recreated with original content
+    assert!(env_path.exists());
+    let decrypted_content = fs::read_to_string(&env_path).unwrap();
+    assert_eq!(decrypted_content, original_content);
+}
+
+#[test]
+fn test_decrypt_with_base64_prefix_and_whitespace() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let env_path = temp_dir.path().join(".env");
+    // Create and encrypt a file
+    let original_content = "APP_KEY=test123\nDB_PASSWORD=secret456";
+    fs::write(&env_path, original_content).unwrap();
+
+    // Encrypt with key
+    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("envcrypt"));
+    cmd.current_dir(temp_dir.path())
+        .arg("encrypt")
+        .arg("--key")
+        .arg(TEST_KEY)
+        .assert()
+        .success();
+
+    // Delete the original .env file to test decryption
+    fs::remove_file(&env_path).unwrap();
+
+    // Decrypt with key that has both "base64:" prefix and whitespace
+    let key_with_prefix_and_whitespace = format!("  base64:{}  ", TEST_KEY);
+    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("envcrypt"));
+    cmd.current_dir(temp_dir.path())
+        .arg("decrypt")
+        .arg("--key")
+        .arg(&key_with_prefix_and_whitespace)
+        .assert()
+        .success();
+
+    // Verify .env was recreated with original content
+    assert!(env_path.exists());
+    let decrypted_content = fs::read_to_string(&env_path).unwrap();
+    assert_eq!(decrypted_content, original_content);
+}

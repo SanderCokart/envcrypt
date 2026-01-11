@@ -117,8 +117,8 @@ fn strip_base64_prefix(key: &str) -> &str {
 
 fn get_encryption_key(key_arg: Option<&str>, is_encrypt: bool) -> Result<String, String> {
     if let Some(key) = key_arg {
-        // Strip "base64:" prefix if present
-        Ok(strip_base64_prefix(key).to_string())
+        // Strip "base64:" prefix if present and trim whitespace
+        Ok(strip_base64_prefix(key.trim()).to_string())
     } else if is_encrypt {
         // Show menu for encryption
         match show_key_menu()? {
@@ -132,8 +132,10 @@ fn get_encryption_key(key_arg: Option<&str>, is_encrypt: bool) -> Result<String,
                 use std::io::Write;
                 std::io::stdout().flush().map_err(|e| format!("Failed to flush stdout: {}", e))?;
                 
-                rpassword::read_password()
-                    .map_err(|e| format!("Failed to read password: {}", e))
+                let key = rpassword::read_password()
+                    .map_err(|e| format!("Failed to read password: {}", e))?;
+                // Strip "base64:" prefix and trim whitespace
+                Ok(strip_base64_prefix(key.trim()).to_string())
             }
         }
     } else {
@@ -142,8 +144,10 @@ fn get_encryption_key(key_arg: Option<&str>, is_encrypt: bool) -> Result<String,
         use std::io::Write;
         std::io::stdout().flush().map_err(|e| format!("Failed to flush stdout: {}", e))?;
         
-        rpassword::read_password()
-            .map_err(|e| format!("Failed to read password: {}", e))
+        let key = rpassword::read_password()
+            .map_err(|e| format!("Failed to read password: {}", e))?;
+        // Strip "base64:" prefix and trim whitespace
+        Ok(strip_base64_prefix(key.trim()).to_string())
     }
 }
 
