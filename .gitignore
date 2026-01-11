@@ -1,18 +1,42 @@
 # Environment files
-.env
-.env.encrypted
+# Ignore all .env files (including .env.local, .env.production, etc.)
+.env*
+!.env.example
+!.env*.example
 
 # Rust build artifacts
 /target/
 **/*.rs.bk
-Cargo.lock
 
-# IDE files
+# Cargo.lock should be committed for binaries (ensures reproducible builds)
+# Only ignore it if this were a library-only project
+
+# IDE and editor files
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
+*.sublime-project
+*.sublime-workspace
+.vim/
+*.code-workspace
 
-# temp files
+# OS-specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Temporary files
 tmp/
+temp/
+*.tmp
+*.log
+
+# Test artifacts (if any are generated outside target/)
+*.test
