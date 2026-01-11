@@ -3,7 +3,7 @@ mod key;
 
 use clap::{Parser, Subcommand};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use base64::Engine;
 
 use cipher::{Cipher, Aes256Cbc, CipherError};
@@ -27,9 +27,12 @@ enum Commands {
         /// Encryption key (will prompt if not provided)
         #[arg(long)]
         key: Option<String>,
-        /// Input .env file path (default: .env)
-        #[arg(long, default_value = ".env")]
-        input: String,
+        /// Input .env file path (default: .env, or .env.{env} if --env is specified)
+        #[arg(long)]
+        input: Option<String>,
+        /// Environment name (e.g., local, production, development). When specified, defaults input to .env.{env} and output to .env.{env}.encrypted
+        #[arg(long)]
+        env: Option<String>,
     },
     /// Decrypt a .env.encrypted file to .env
     Decrypt {
@@ -49,9 +52,34 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Encrypt { cipher, key, input } => {
-            let output = derive_output_path(&input, true);
-            match encrypt_env(&cipher, key.as_deref(), &input, &output) {
+        Commands::Encrypt { cipher, key, input, env } => {
+            // Determine input path: use explicit input if provided, otherwise .env.{env} or .env
+            let input_path = if let Some(input) = input {
+                input
+            } else if let Some(env_name) = &env {
+                format!(".env.{}", env_name)
+            } else {
+                ".env".to_string()
+            };
+            
+            // Determine output path: if --env is provided, use .env.{env}.encrypted in the same directory as input
+            // Otherwise, derive from input path
+            let output = if let Some(env_name) = &env {
+                let input_path_buf = PathBuf::from(&input_path);
+                let parent = input_path_buf.parent();
+                let output_filename = format!(".env.{}.encrypted", env_name);
+                
+                if let Some(parent_dir) = parent {
+                    // Input has a directory component, preserve it
+                    parent_dir.join(&output_filename).to_string_lossy().to_string()
+                } else {
+                    // Input is just a filename, output in current directory
+                    output_filename
+                }
+            } else {
+                derive_output_path(&input_path, true)
+            };
+            match encrypt_env(&cipher, key.as_deref(), &input_path, &output) {
                 Ok(used_key) => {
                     println!("\n⚠️  IMPORTANT: Store this encryption key in a safe place!");
                     println!("   You will need it to decrypt your .env file later.");
@@ -160,14 +188,22 @@ fn get_cipher(cipher_name: &str) -> Result<Box<dyn Cipher>, String> {
 
 fn derive_output_path(input_path: &str, is_encrypt: bool) -> String {
     if is_encrypt {
-        // For encryption: .env -> .env.encrypted
-        if input_path.ends_with(".env") {
-            input_path.replace(".env", ".env.encrypted")
+        // For encryption: .env -> .env.encrypted, .env.{env} -> .env.{env}.encrypted
+        if input_path.ends_with(".encrypted") {
+            // Already encrypted, just return as-is (shouldn't happen normally)
+            input_path.to_string()
+        } else if input_path == ".env" {
+            // Simple .env case
+            ".env.encrypted".to_string()
+        } else if input_path.starts_with(".env.") {
+            // .env.{something} case - append .encrypted
+            format!("{}.encrypted", input_path)
         } else {
+            // Other paths - append .encrypted
             format!("{}.encrypted", input_path)
         }
     } else {
-        // For decryption: .env.encrypted -> .env
+        // For decryption: .env.encrypted -> .env, .env.{env}.encrypted -> .env.{env}
         if input_path.ends_with(".env.encrypted") {
             input_path.replace(".env.encrypted", ".env")
         } else if input_path.ends_with(".encrypted") {
