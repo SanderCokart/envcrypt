@@ -1,6 +1,13 @@
+mod cipher;
+mod key;
+
 use clap::{Parser, Subcommand};
 use std::fs;
 use std::path::Path;
+use base64::Engine;
+
+use cipher::{Cipher, Aes256Cbc, CipherError};
+use key::{derive_keys, generate_salt};
 
 #[derive(Parser)]
 #[command(name = "envcrypt")]
@@ -13,44 +20,226 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Encrypt a .env file to .env.encrypted
-    Encrypt,
+    Encrypt {
+        /// Cipher to use for encryption (default: AES-256-CBC)
+        #[arg(long, default_value = "AES-256-CBC")]
+        cipher: String,
+        /// Encryption key (will prompt if not provided)
+        #[arg(long)]
+        key: Option<String>,
+    },
     /// Decrypt a .env.encrypted file to .env
-    Decrypt,
+    Decrypt {
+        /// Cipher to use for decryption (default: AES-256-CBC)
+        #[arg(long, default_value = "AES-256-CBC")]
+        cipher: String,
+        /// Decryption key (will prompt if not provided)
+        #[arg(long)]
+        key: Option<String>,
+    },
 }
 
 fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Encrypt => {
-            encrypt_env();
+        Commands::Encrypt { cipher, key } => {
+            match encrypt_env(&cipher, key.as_deref()) {
+                Ok(used_key) => {
+                    println!("\n⚠️  IMPORTANT: Store this encryption key in a safe place!");
+                    println!("   You will need it to decrypt your .env file later.");
+                    println!("\n   Encryption key: base64:{}", used_key);
+                    println!("\n   This key will not be shown again. Make sure to save it securely.");
+                }
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(1);
+                }
+            }
         }
-        Commands::Decrypt => {
-            println!("Decrypt functionality not yet implemented");
+        Commands::Decrypt { cipher, key } => {
+            if let Err(e) = decrypt_env(&cipher, key.as_deref()) {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
         }
     }
 }
 
-fn encrypt_env() {
+enum KeyChoice {
+    GenerateNew,
+    UseCustom,
+}
+
+fn show_key_menu() -> Result<KeyChoice, String> {
+    use std::io::{self, Write};
+    
+    println!("\nSelect encryption key option:");
+    println!("  1) Generate a new key (default)");
+    println!("  2) Use a custom key");
+    print!("\nEnter choice [1]: ");
+    io::stdout().flush().map_err(|e| format!("Failed to flush stdout: {}", e))?;
+    
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)
+        .map_err(|e| format!("Failed to read input: {}", e))?;
+    
+    let choice = input.trim();
+    match choice {
+        "2" => Ok(KeyChoice::UseCustom),
+        "1" | "" => Ok(KeyChoice::GenerateNew),
+        _ => {
+            println!("Invalid choice, defaulting to generate new key");
+            Ok(KeyChoice::GenerateNew)
+        }
+    }
+}
+
+fn generate_base64_key() -> String {
+    use rand::RngCore;
+    // Generate 32 random bytes (256 bits) and encode as base64
+    let mut key_bytes = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut key_bytes);
+    base64::engine::general_purpose::STANDARD.encode(&key_bytes)
+}
+
+fn strip_base64_prefix(key: &str) -> &str {
+    key.strip_prefix("base64:").unwrap_or(key)
+}
+
+fn get_encryption_key(key_arg: Option<&str>, is_encrypt: bool) -> Result<String, String> {
+    if let Some(key) = key_arg {
+        // Strip "base64:" prefix if present
+        Ok(strip_base64_prefix(key).to_string())
+    } else if is_encrypt {
+        // Show menu for encryption
+        match show_key_menu()? {
+            KeyChoice::GenerateNew => {
+                let key = generate_base64_key();
+                println!("\nGenerated new encryption key");
+                Ok(key)
+            }
+            KeyChoice::UseCustom => {
+                print!("Enter encryption key: ");
+                use std::io::Write;
+                std::io::stdout().flush().map_err(|e| format!("Failed to flush stdout: {}", e))?;
+                
+                rpassword::read_password()
+                    .map_err(|e| format!("Failed to read password: {}", e))
+            }
+        }
+    } else {
+        // For decryption, just prompt for key
+        print!("Enter decryption key: ");
+        use std::io::Write;
+        std::io::stdout().flush().map_err(|e| format!("Failed to flush stdout: {}", e))?;
+        
+        rpassword::read_password()
+            .map_err(|e| format!("Failed to read password: {}", e))
+    }
+}
+
+fn get_cipher(cipher_name: &str) -> Result<Box<dyn Cipher>, String> {
+    match cipher_name.to_uppercase().as_str() {
+        "AES-256-CBC" => Ok(Box::new(Aes256Cbc)),
+        _ => Err(format!("Unsupported cipher: {}. Supported ciphers: AES-256-CBC", cipher_name)),
+    }
+}
+
+fn encrypt_env(cipher_name: &str, key_arg: Option<&str>) -> Result<String, String> {
     let env_path = Path::new(".env");
     let encrypted_path = Path::new(".env.encrypted");
 
     if !env_path.exists() {
-        eprintln!("Error: .env file not found");
-        std::process::exit(1);
+        return Err(".env file not found".to_string());
     }
 
-    match fs::read_to_string(env_path) {
-        Ok(content) => {
-            if let Err(e) = fs::write(encrypted_path, content) {
-                eprintln!("Error writing .env.encrypted: {}", e);
-                std::process::exit(1);
-            }
-            println!("Successfully encrypted .env to .env.encrypted");
-        }
-        Err(e) => {
-            eprintln!("Error reading .env file: {}", e);
-            std::process::exit(1);
-        }
+    // Get encryption key
+    let key_input = get_encryption_key(key_arg, true)?;
+    
+    // Get cipher
+    let cipher = get_cipher(cipher_name)?;
+    
+    // Read plaintext
+    let plaintext = fs::read_to_string(env_path)
+        .map_err(|e| format!("Error reading .env file: {}", e))?;
+    
+    // Generate salt for key derivation
+    let salt = generate_salt();
+    
+    // Derive keys
+    let (encryption_key, mac_key) = derive_keys(&key_input, &salt);
+    
+    // Encrypt (returns: iv + encrypted_data + mac)
+    let encrypted = cipher.encrypt(plaintext.as_bytes(), &encryption_key, &mac_key)
+        .map_err(|e| format!("Encryption failed: {}", e))?;
+    
+    // Store salt + encrypted data
+    // Format: base64(salt + iv + encrypted_data + mac)
+    let mut output = Vec::with_capacity(salt.len() + encrypted.len());
+    output.extend_from_slice(&salt);
+    output.extend_from_slice(&encrypted);
+    let final_output = base64::engine::general_purpose::STANDARD.encode(&output);
+    
+    // Write encrypted file
+    fs::write(encrypted_path, final_output)
+        .map_err(|e| format!("Error writing .env.encrypted: {}", e))?;
+    
+    println!("\nSuccessfully encrypted .env to .env.encrypted");
+    Ok(key_input)
+}
+
+fn decrypt_env(cipher_name: &str, key_arg: Option<&str>) -> Result<(), String> {
+    let encrypted_path = Path::new(".env.encrypted");
+    let env_path = Path::new(".env");
+
+    if !encrypted_path.exists() {
+        return Err(".env.encrypted file not found".to_string());
     }
+
+    // Get decryption key
+    let key_input = get_encryption_key(key_arg, false)?;
+    
+    // Get cipher
+    let cipher = get_cipher(cipher_name)?;
+    
+    // Read encrypted file
+    let encrypted_content = fs::read_to_string(encrypted_path)
+        .map_err(|e| format!("Error reading .env.encrypted file: {}", e))?;
+    
+    // Decode base64
+    let data = base64::engine::general_purpose::STANDARD.decode(encrypted_content.trim())
+        .map_err(|e| format!("Invalid base64 in encrypted file: {}", e))?;
+    
+    // Extract salt (first 16 bytes) and encrypted data (iv + encrypted_data + mac)
+    if data.len() < 16 {
+        return Err("Invalid encrypted file format".to_string());
+    }
+    
+    let salt: [u8; 16] = data[0..16].try_into()
+        .map_err(|_| "Invalid salt in encrypted file".to_string())?;
+    let encrypted_data = &data[16..];
+    
+    // Derive keys using the stored salt
+    let (encryption_key, mac_key) = derive_keys(&key_input, &salt);
+    
+    // Decrypt (encrypted_data contains: iv + encrypted_data + mac)
+    let plaintext = cipher.decrypt(encrypted_data, &encryption_key, &mac_key)
+        .map_err(|e| {
+            match e {
+                CipherError::MacVerificationFailed => "MAC verification failed - the encrypted file may have been tampered with or the key is incorrect".to_string(),
+                CipherError::DecryptionFailed => "Decryption failed - incorrect key or corrupted data".to_string(),
+                _ => format!("Decryption error: {}", e),
+            }
+        })?;
+    
+    let plaintext_str = String::from_utf8(plaintext)
+        .map_err(|e| format!("Decrypted data is not valid UTF-8: {}", e))?;
+    
+    // Write decrypted file
+    fs::write(env_path, plaintext_str)
+        .map_err(|e| format!("Error writing .env file: {}", e))?;
+    
+    println!("Successfully decrypted .env.encrypted to .env");
+    Ok(())
 }
