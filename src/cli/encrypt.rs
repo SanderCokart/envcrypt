@@ -58,7 +58,7 @@ use crate::cli::output::{OutputConfig, info, verbose, debug};
 /// # Example
 ///
 /// ```no_run
-/// use envcrypt::cli::{encrypt_env, output::OutputConfig};
+/// use envcrypt::cli::{encrypt_env, OutputConfig};
 ///
 /// let output_config = OutputConfig::new(false, false, 0);
 /// let key = encrypt_env("AES-256-CBC", Some("my-key"), ".env", ".env.encrypted", &output_config, false, false, false)?;

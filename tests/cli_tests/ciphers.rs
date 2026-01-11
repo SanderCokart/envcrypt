@@ -79,9 +79,9 @@ fn test_chacha20_poly1305_no_dash() {
     let original_content = "APP_KEY=test123";
     fs::write(&env_path, original_content).unwrap();
 
-    // Encrypt with ChaCha20-Poly1305 (no dash variant)
+    // Encrypt with ChaCha20-Poly1305
     let mut cmd = create_encrypt_command(temp_dir.path(), TEST_KEY);
-    cmd.arg("--cipher").arg("CHACHA20POLY1305");
+    cmd.arg("--cipher").arg("CHACHA20-POLY1305");
     cmd.assert().success();
 
     assert!(encrypted_path.exists());
@@ -89,7 +89,7 @@ fn test_chacha20_poly1305_no_dash() {
     // Decrypt
     fs::remove_file(&env_path).unwrap();
     let mut cmd = create_decrypt_command(temp_dir.path(), TEST_KEY);
-    cmd.arg("--cipher").arg("CHACHA20POLY1305");
+    cmd.arg("--cipher").arg("CHACHA20-POLY1305");
     cmd.assert().success();
 
     let decrypted_content = fs::read_to_string(&env_path).unwrap();

@@ -5,6 +5,27 @@ use crate::cipher::{Cipher, Aes256Cbc};
 #[cfg(feature = "cipher")]
 use crate::cipher::{Aes256Gcm, ChaCha20Poly1305};
 
+/// Returns a list of all supported cipher names.
+///
+/// The list respects feature flags, so it only includes ciphers that are
+/// available in the current build configuration.
+///
+/// # Returns
+///
+/// Returns a vector of cipher name strings. The first cipher in the list
+/// is the default cipher.
+pub fn get_supported_ciphers() -> Vec<&'static str> {
+    let mut ciphers = vec!["AES-256-CBC"];
+    
+    #[cfg(feature = "cipher")]
+    {
+        ciphers.push("AES-256-GCM");
+        ciphers.push("CHACHA20-POLY1305");
+    }
+    
+    ciphers
+}
+
 /// Creates a cipher instance from a cipher name string.
 ///
 /// This function maps cipher name strings to their corresponding [`Cipher`] implementations.
@@ -41,7 +62,7 @@ pub fn get_cipher(cipher_name: &str) -> Result<Box<dyn Cipher>, String> {
         #[cfg(feature = "cipher")]
         "AES-256-GCM" => Ok(Box::new(Aes256Gcm)),
         #[cfg(feature = "cipher")]
-        "CHACHA20-POLY1305" | "CHACHA20POLY1305" => Ok(Box::new(ChaCha20Poly1305)),
+        "CHACHA20-POLY1305" => Ok(Box::new(ChaCha20Poly1305)),
         _ => {
             #[cfg(feature = "cipher")]
             {
@@ -103,9 +124,9 @@ mod tests {
 
     #[cfg(feature = "cipher")]
     #[test]
-    fn test_get_cipher_chacha20poly1305_no_dash() {
+    fn test_get_cipher_chacha20poly1305_no_dash_fails() {
         let result = get_cipher("CHACHA20POLY1305");
-        assert!(result.is_ok());
+        assert!(result.is_err());
     }
 
     #[cfg(feature = "cipher")]

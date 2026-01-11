@@ -7,14 +7,14 @@
 //!
 //! The CLI is typically invoked through the [`run()`] function with command-line arguments.
 
-use clap::{ArgAction, Parser, Subcommand};
+use clap::{ArgAction, Parser, Subcommand, builder::PossibleValuesParser};
 
 mod encrypt;
 mod decrypt;
 mod paths;
 mod key_handling;
 mod cipher;
-mod output;
+pub mod output;
 
 // Re-export public APIs
 pub use paths::derive_output_path;
@@ -22,11 +22,13 @@ pub use key_handling::strip_base64_prefix;
 pub use cipher::get_cipher;
 pub use encrypt::encrypt_env;
 pub use decrypt::decrypt_env;
+pub use output::OutputConfig;
 
 // Internal use
 use paths::{resolve_encrypt_input_path, resolve_encrypt_output_path, resolve_decrypt_input};
 use key_handling::get_key_arg;
-use output::{OutputConfig, info};
+use output::info;
+use cipher::get_supported_ciphers;
 
 // Version string with release date
 // Release date is read from Cargo.toml [package.metadata.release-date] via build script
@@ -70,7 +72,7 @@ pub enum Commands {
     /// Encrypt a .env file to .env.encrypted
     Encrypt {
         /// Cipher to use for encryption
-        #[arg(long, default_value = "AES-256-CBC")]
+        #[arg(long, default_value = "AES-256-CBC", value_parser = PossibleValuesParser::new(get_supported_ciphers()), ignore_case = true)]
         cipher: String,
         /// Encryption key (will prompt if not provided)
         #[arg(long)]
@@ -85,7 +87,7 @@ pub enum Commands {
     /// Decrypt a .env.encrypted file to .env
     Decrypt {
         /// Cipher to use for decryption
-        #[arg(long, default_value = "AES-256-CBC")]
+        #[arg(long, default_value = "AES-256-CBC", value_parser = PossibleValuesParser::new(get_supported_ciphers()), ignore_case = true)]
         cipher: String,
         /// Decryption key (will prompt if not provided)
         #[arg(long)]
