@@ -1,6 +1,13 @@
 # envcrypt
 
+> **⚠️ VIBE CODED ⚠️**  
+> This project was fully vibe coded and AI generated. It was forced to work with test-driven development to ensure working order. While functional, it may not be up to production standards. Use at your own discretion.
+> 
+> **Note:** Just because it is vibe coded does not mean there was no human intervention. Each commit requires human intervention.
+
 A secure command-line tool for encrypting and decrypting environment files using strong encryption algorithms with authentication.
+
+**Inspired by Laravel's `php artisan env:encrypt` functionality.**
 
 ## Overview
 
@@ -24,13 +31,7 @@ A secure command-line tool for encrypting and decrypting environment files using
 
 ### From Source
 
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd envcrypt
-```
-
-2. Build and install:
+1. Build and install:
 ```bash
 ./install.sh
 ```
