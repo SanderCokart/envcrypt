@@ -1,6 +1,4 @@
-mod common;
-
-use common::*;
+use crate::common::*;
 
 #[test]
 fn test_encrypt_with_nonexistent_input_fails() {

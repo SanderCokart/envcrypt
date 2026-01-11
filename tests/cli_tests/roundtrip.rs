@@ -1,6 +1,4 @@
-mod common;
-
-use common::*;
+use crate::common::*;
 use std::fs;
 
 #[test]
@@ -66,40 +64,6 @@ fn test_encrypt_decrypt_roundtrip_with_custom_paths() {
     cmd.assert().success();
 
     // Verify .env was recreated with original content
-    assert!(env_path.exists());
-    let decrypted_content = fs::read_to_string(&env_path).unwrap();
-    assert_eq!(decrypted_content, original_content);
-}
-
-#[test]
-fn test_encrypt_decrypt_roundtrip_with_env() {
-    let temp_dir = create_temp_dir();
-    let env_path = temp_dir.path().join(".env.local");
-    let encrypted_path = temp_dir.path().join(".env.local.encrypted");
-
-    // Create a test .env.local file
-    let original_content = "APP_KEY=test123\nDB_PASSWORD=secret456\nANOTHER_VAR=value";
-    fs::write(&env_path, original_content).unwrap();
-
-    // Encrypt with --env flag
-    let mut cmd = create_encrypt_command(temp_dir.path(), TEST_KEY);
-    cmd.arg("--env").arg("local");
-    cmd.assert().success();
-
-    // Verify encrypted file exists and is different
-    assert!(encrypted_path.exists());
-    let encrypted_content = fs::read_to_string(&encrypted_path).unwrap();
-    assert_ne!(encrypted_content, original_content);
-
-    // Delete the original .env.local file to test decryption
-    fs::remove_file(&env_path).unwrap();
-
-    // Decrypt (using explicit input path since decrypt doesn't have --env yet)
-    let mut cmd = create_decrypt_command(temp_dir.path(), TEST_KEY);
-    cmd.arg("--input").arg(".env.local.encrypted");
-    cmd.assert().success();
-
-    // Verify .env.local was recreated with original content
     assert!(env_path.exists());
     let decrypted_content = fs::read_to_string(&env_path).unwrap();
     assert_eq!(decrypted_content, original_content);

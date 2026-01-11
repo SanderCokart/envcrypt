@@ -1,7 +1,11 @@
 [package]
-name = "env-encrypter-rust"
+name = "envcrypt"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+
+[lib]
+name = "envcrypt"
+path = "src/lib.rs"
 
 [[bin]]
 name = "envcrypt"
@@ -19,8 +23,12 @@ rand = "0.8"
 base64 = "0.21"
 rpassword = "7.0"
 generic-array = "0.14"
+anyhow = "1.0"
 
 [dev-dependencies]
 assert_cmd = "2.0"
 predicates = "3.0"
 tempfile = "3.10"
+
+[profile.test]
+debug = 0
