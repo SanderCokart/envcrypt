@@ -1,6 +1,6 @@
 # envcrypt
 
-A secure command-line tool for encrypting and decrypting environment files using AES-256-CBC encryption with HMAC-SHA256 authentication.
+A secure command-line tool for encrypting and decrypting environment files using strong encryption algorithms with authentication.
 
 ## Overview
 
@@ -8,7 +8,8 @@ A secure command-line tool for encrypting and decrypting environment files using
 
 ## Features
 
-- **Strong Encryption**: AES-256-CBC encryption with HMAC-SHA256 authentication
+- **Multiple Cipher Support**: AES-256-CBC, AES-256-GCM, and ChaCha20-Poly1305
+- **Strong Encryption**: Industry-standard encryption algorithms with authentication
 - **Secure Key Derivation**: PBKDF2 with 100,000 iterations
 - **Constant-Time Security**: Constant-time MAC verification to prevent timing attacks
 - **Key Zeroization**: Automatic memory clearing of sensitive keys
@@ -188,6 +189,23 @@ envcrypt decrypt --input .env.production.encrypted --key "my-key"
 # Decrypts to .env.production
 ```
 
+#### Encrypt with Different Cipher
+
+```bash
+# Use AES-256-GCM
+envcrypt encrypt --cipher AES-256-GCM
+
+# Use ChaCha20-Poly1305
+envcrypt encrypt --cipher CHACHA20-POLY1305
+```
+
+#### Decrypt with Specific Cipher
+
+```bash
+# When decrypting, use the same cipher that was used for encryption
+envcrypt decrypt --cipher AES-256-GCM --key "my-key"
+```
+
 #### Non-Interactive Encryption
 
 ```bash
@@ -260,14 +278,47 @@ envcrypt decrypt --key "abc123..."
 
 The tool will automatically strip the prefix if present.
 
+### Available Ciphers
+
+`envcrypt` supports multiple encryption algorithms. Choose the cipher that best fits your needs:
+
+#### AES-256-CBC (Default)
+- **Algorithm**: AES-256 in CBC mode with PKCS7 padding
+- **Authentication**: HMAC-SHA256 (separate MAC)
+- **Format**: `[Salt][IV (16 bytes)][Encrypted Data][MAC (32 bytes)]`
+- **Use Case**: Default choice, widely compatible, proven security
+- **Example**: `envcrypt encrypt --cipher AES-256-CBC`
+
+#### AES-256-GCM
+- **Algorithm**: AES-256 in Galois/Counter Mode (GCM)
+- **Authentication**: Built-in GCM authentication tag
+- **Format**: `[Salt][Nonce (12 bytes)][Encrypted Data][Tag (16 bytes)]`
+- **Use Case**: Modern authenticated encryption, hardware-accelerated on modern CPUs
+- **Example**: `envcrypt encrypt --cipher AES-256-GCM`
+
+#### ChaCha20-Poly1305
+- **Algorithm**: ChaCha20 stream cipher with Poly1305 MAC
+- **Authentication**: Built-in Poly1305 authentication tag
+- **Format**: `[Salt][Nonce (12 bytes)][Encrypted Data][Tag (16 bytes)]`
+- **Use Case**: Fast software implementation, excellent performance without hardware acceleration
+- **Example**: `envcrypt encrypt --cipher CHACHA20-POLY1305`
+
+**Note**: When decrypting, you must use the same cipher that was used for encryption. The cipher name is case-insensitive.
+
 ## Security
 
 ### Encryption Details
 
-- **Algorithm**: AES-256 in CBC mode
-- **Authentication**: HMAC-SHA256
+- **Algorithms**: AES-256-CBC, AES-256-GCM, or ChaCha20-Poly1305
+- **Authentication**: 
+  - AES-256-CBC: HMAC-SHA256 (separate MAC)
+  - AES-256-GCM: Built-in GCM authentication tag
+  - ChaCha20-Poly1305: Built-in Poly1305 authentication tag
 - **Key Derivation**: PBKDF2-HMAC-SHA256 with 100,000 iterations
-- **IV Generation**: Cryptographically secure random 16-byte IV per encryption
+- **IV/Nonce Generation**: Cryptographically secure random values per encryption
+  - AES-256-CBC: 16-byte IV
+  - AES-256-GCM: 12-byte nonce
+  - ChaCha20-Poly1305: 12-byte nonce
 - **Salt**: Random 16-byte salt per encryption (stored with encrypted data)
 
 ### Security Features
@@ -280,16 +331,27 @@ The tool will automatically strip the prefix if present.
 
 ### File Format
 
-Encrypted files contain base64-encoded data with the following structure:
+Encrypted files contain base64-encoded data. The structure varies by cipher:
 
+**AES-256-CBC:**
 ```
 base64([Salt (16 bytes)][IV (16 bytes)][Encrypted Data][MAC (32 bytes)])
 ```
 
-- **Salt**: Used for key derivation, stored with encrypted data
-- **IV**: Initialization vector for AES-CBC, unique per encryption
-- **Encrypted Data**: AES-256-CBC encrypted plaintext with PKCS7 padding
-- **MAC**: HMAC-SHA256 of (IV + Encrypted Data)
+**AES-256-GCM:**
+```
+base64([Salt (16 bytes)][Nonce (12 bytes)][Encrypted Data][Tag (16 bytes)])
+```
+
+**ChaCha20-Poly1305:**
+```
+base64([Salt (16 bytes)][Nonce (12 bytes)][Encrypted Data][Tag (16 bytes)])
+```
+
+- **Salt**: Used for key derivation, stored with encrypted data (all ciphers)
+- **IV/Nonce**: Initialization vector or nonce, unique per encryption
+- **Encrypted Data**: Encrypted plaintext
+- **MAC/Tag**: Authentication tag (format depends on cipher)
 
 ### Best Practices
 

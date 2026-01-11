@@ -2,6 +2,9 @@
 
 use crate::cipher::{Cipher, Aes256Cbc};
 
+#[cfg(feature = "cipher")]
+use crate::cipher::{Aes256Gcm, ChaCha20Poly1305};
+
 /// Creates a cipher instance from a cipher name string.
 ///
 /// This function maps cipher name strings to their corresponding [`Cipher`] implementations.
@@ -18,8 +21,10 @@ use crate::cipher::{Cipher, Aes256Cbc};
 ///
 /// # Errors
 ///
-/// Returns an error string if the cipher name is not recognized. Currently, only
-/// "AES-256-CBC" is supported.
+/// Returns an error string if the cipher name is not recognized. Supported ciphers:
+/// - AES-256-CBC (default)
+/// - AES-256-GCM
+/// - CHACHA20-POLY1305
 ///
 /// # Example
 ///
@@ -33,7 +38,20 @@ use crate::cipher::{Cipher, Aes256Cbc};
 pub fn get_cipher(cipher_name: &str) -> Result<Box<dyn Cipher>, String> {
     match cipher_name.to_uppercase().as_str() {
         "AES-256-CBC" => Ok(Box::new(Aes256Cbc)),
-        _ => Err(format!("Unsupported cipher: {}. Supported ciphers: AES-256-CBC", cipher_name)),
+        #[cfg(feature = "cipher")]
+        "AES-256-GCM" => Ok(Box::new(Aes256Gcm)),
+        #[cfg(feature = "cipher")]
+        "CHACHA20-POLY1305" | "CHACHA20POLY1305" => Ok(Box::new(ChaCha20Poly1305)),
+        _ => {
+            #[cfg(feature = "cipher")]
+            {
+                Err(format!("Unsupported cipher: {}. Supported ciphers: AES-256-CBC, AES-256-GCM, CHACHA20-POLY1305", cipher_name))
+            }
+            #[cfg(not(feature = "cipher"))]
+            {
+                Err(format!("Unsupported cipher: {}. Supported ciphers: AES-256-CBC", cipher_name))
+            }
+        }
     }
 }
 
@@ -60,5 +78,40 @@ mod tests {
         if let Err(err_msg) = result {
             assert!(err_msg.contains("Unsupported cipher"));
         }
+    }
+
+    #[cfg(feature = "cipher")]
+    #[test]
+    fn test_get_cipher_aes256gcm() {
+        let result = get_cipher("AES-256-GCM");
+        assert!(result.is_ok());
+    }
+
+    #[cfg(feature = "cipher")]
+    #[test]
+    fn test_get_cipher_aes256gcm_lowercase() {
+        let result = get_cipher("aes-256-gcm");
+        assert!(result.is_ok());
+    }
+
+    #[cfg(feature = "cipher")]
+    #[test]
+    fn test_get_cipher_chacha20poly1305() {
+        let result = get_cipher("CHACHA20-POLY1305");
+        assert!(result.is_ok());
+    }
+
+    #[cfg(feature = "cipher")]
+    #[test]
+    fn test_get_cipher_chacha20poly1305_no_dash() {
+        let result = get_cipher("CHACHA20POLY1305");
+        assert!(result.is_ok());
+    }
+
+    #[cfg(feature = "cipher")]
+    #[test]
+    fn test_get_cipher_chacha20poly1305_lowercase() {
+        let result = get_cipher("chacha20-poly1305");
+        assert!(result.is_ok());
     }
 }

@@ -13,6 +13,9 @@ fn test_decrypt_with_wrong_key_fails() {
     let mut cmd = create_encrypt_command(temp_dir.path(), TEST_KEY);
     cmd.assert().success();
 
+    // Delete the original .env file so decryption can create it
+    std::fs::remove_file(&env_path).unwrap();
+
     // Try to decrypt with wrong key
     let mut cmd = create_decrypt_command(temp_dir.path(), "wrong-key");
     cmd.assert()

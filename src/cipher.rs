@@ -35,11 +35,30 @@ use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use subtle::ConstantTimeEq;
 
+#[cfg(feature = "cipher")]
+use aes_gcm::{
+    aead::{Aead as AeadTrait, KeyInit},
+    Aes256Gcm as Aes256GcmImpl, Nonce as AesGcmNonce, Key as AesGcmKey,
+};
+
+#[cfg(feature = "cipher")]
+use chacha20poly1305::{
+    ChaCha20Poly1305 as ChaCha20Poly1305Impl, Nonce as ChaChaNonce, Key as ChaChaKey,
+};
+
 use crate::key;
 
 type Aes256CbcEnc = Encryptor<Aes256>;
 type Aes256CbcDec = Decryptor<Aes256>;
 type HmacSha256 = Hmac<Sha256>;
+
+/// Generates a cryptographically secure random 12-byte nonce for AEAD ciphers.
+fn generate_nonce_12() -> [u8; 12] {
+    use rand::RngCore;
+    let mut nonce = [0u8; 12];
+    rand::thread_rng().fill_bytes(&mut nonce);
+    nonce
+}
 
 /// Trait for encryption/decryption operations with authenticated encryption.
 ///
@@ -239,7 +258,7 @@ impl Cipher for Aes256Cbc {
         mac_input.extend_from_slice(&iv);
         mac_input.extend_from_slice(&buffer);
         
-        let mut mac = HmacSha256::new_from_slice(mac_key)
+        let mut mac = <HmacSha256 as Mac>::new_from_slice(mac_key)
             .map_err(|e| CipherError::EncryptionFailed(format!("Failed to create MAC: {:?}", e)))?;
         mac.update(&mac_input);
         let mac_result = mac.finalize();
@@ -278,7 +297,7 @@ impl Cipher for Aes256Cbc {
         mac_input.extend_from_slice(iv);
         mac_input.extend_from_slice(encrypted_data);
         
-        let mut mac = HmacSha256::new_from_slice(mac_key)
+        let mut mac = <HmacSha256 as Mac>::new_from_slice(mac_key)
             .map_err(|_| CipherError::MacVerificationFailed)?;
         mac.update(&mac_input);
         let mac_result = mac.finalize();
@@ -302,5 +321,204 @@ impl Cipher for Aes256Cbc {
             .map_err(|_| CipherError::DecryptionFailed)?;
         
         Ok(decrypted.to_vec())
+    }
+}
+
+/// AES-256-GCM cipher implementation with built-in authentication.
+///
+/// This implementation provides authenticated encryption using:
+/// - **Encryption:** AES-256 in GCM (Galois/Counter Mode)
+/// - **Authentication:** Built-in GCM authentication tag (no separate HMAC needed)
+/// - **Nonce Generation:** Random 12-byte nonce for each encryption
+///
+/// # Security Properties
+///
+/// - **Confidentiality:** AES-256 provides strong encryption
+/// - **Integrity & Authenticity:** GCM mode provides authenticated encryption
+/// - **Performance:** Hardware-accelerated on modern CPUs
+///
+/// # Format
+///
+/// Encrypted output format: `[Nonce (12 bytes)][Encrypted Data (variable)][Tag (16 bytes)]`
+///
+/// # Example
+///
+/// ```no_run
+/// use envcrypt::cipher::{Cipher, Aes256Gcm};
+///
+/// let cipher = Aes256Gcm;
+/// let encryption_key = [0u8; 32];
+/// let mac_key = [0u8; 32]; // Not used for GCM, but required by trait
+///
+/// let plaintext = b"secret data";
+/// let ciphertext = cipher.encrypt(plaintext, &encryption_key, &mac_key)?;
+/// let decrypted = cipher.decrypt(&ciphertext, &encryption_key, &mac_key)?;
+/// assert_eq!(plaintext, decrypted.as_slice());
+/// # Ok::<(), envcrypt::cipher::CipherError>(())
+/// ```
+#[cfg(feature = "cipher")]
+pub struct Aes256Gcm;
+
+#[cfg(feature = "cipher")]
+impl Cipher for Aes256Gcm {
+    fn encrypt(&self, plaintext: &[u8], encryption_key: &[u8], _mac_key: &[u8]) -> Result<Vec<u8>, CipherError> {
+        // Validate key length
+        if encryption_key.len() != 32 {
+            return Err(CipherError::EncryptionFailed("Encryption key must be 32 bytes (256 bits)".to_string()));
+        }
+
+        // Generate random nonce (12 bytes for GCM)
+        let nonce = generate_nonce_12();
+        
+        // Convert key to array
+        let key_array: [u8; 32] = encryption_key.try_into()
+            .map_err(|_| CipherError::EncryptionFailed("Invalid key length".to_string()))?;
+        
+        // Create cipher instance
+        let key = AesGcmKey::<Aes256GcmImpl>::from_slice(&key_array);
+        let cipher = Aes256GcmImpl::new(key);
+        
+        // Encrypt with authentication
+        let nonce_array = AesGcmNonce::from_slice(&nonce);
+        let ciphertext = AeadTrait::encrypt(&cipher, nonce_array, plaintext)
+            .map_err(|e| CipherError::EncryptionFailed(format!("GCM encryption failed: {:?}", e)))?;
+        
+        // Combine: nonce + encrypted_data + tag
+        let mut output = Vec::with_capacity(nonce.len() + ciphertext.len());
+        output.extend_from_slice(&nonce);
+        output.extend_from_slice(&ciphertext);
+        
+        Ok(output)
+    }
+    
+    fn decrypt(&self, ciphertext: &[u8], encryption_key: &[u8], _mac_key: &[u8]) -> Result<Vec<u8>, CipherError> {
+        // Validate key length
+        if encryption_key.len() != 32 {
+            return Err(CipherError::DecryptionFailed);
+        }
+
+        // Validate minimum size: nonce (12) + tag (16) = 28 bytes
+        if ciphertext.len() < 28 {
+            return Err(CipherError::InvalidFormat);
+        }
+        
+        // Extract components
+        let nonce = &ciphertext[0..12];
+        let encrypted_data = &ciphertext[12..];
+        
+        // Convert key to array
+        let key_array: [u8; 32] = encryption_key.try_into()
+            .map_err(|_| CipherError::DecryptionFailed)?;
+        
+        // Create cipher instance
+        let key = AesGcmKey::<Aes256GcmImpl>::from_slice(&key_array);
+        let cipher = Aes256GcmImpl::new(key);
+        
+        // Decrypt with authentication
+        let nonce_array = AesGcmNonce::from_slice(nonce);
+        let plaintext = AeadTrait::decrypt(&cipher, nonce_array, encrypted_data)
+            .map_err(|_| CipherError::MacVerificationFailed)?; // GCM auth failure
+        
+        Ok(plaintext)
+    }
+}
+
+/// ChaCha20-Poly1305 cipher implementation with built-in authentication.
+///
+/// This implementation provides authenticated encryption using:
+/// - **Encryption:** ChaCha20 stream cipher
+/// - **Authentication:** Poly1305 MAC (built-in, no separate HMAC needed)
+/// - **Nonce Generation:** Random 12-byte nonce for each encryption
+///
+/// # Security Properties
+///
+/// - **Confidentiality:** ChaCha20 provides strong encryption
+/// - **Integrity & Authenticity:** Poly1305 provides authenticated encryption
+/// - **Performance:** Fast software implementation, no hardware acceleration needed
+/// - **Modern:** RFC 8439 standard, widely trusted
+///
+/// # Format
+///
+/// Encrypted output format: `[Nonce (12 bytes)][Encrypted Data (variable)][Tag (16 bytes)]`
+///
+/// # Example
+///
+/// ```no_run
+/// use envcrypt::cipher::{Cipher, ChaCha20Poly1305};
+///
+/// let cipher = ChaCha20Poly1305;
+/// let encryption_key = [0u8; 32];
+/// let mac_key = [0u8; 32]; // Not used for ChaCha20-Poly1305, but required by trait
+///
+/// let plaintext = b"secret data";
+/// let ciphertext = cipher.encrypt(plaintext, &encryption_key, &mac_key)?;
+/// let decrypted = cipher.decrypt(&ciphertext, &encryption_key, &mac_key)?;
+/// assert_eq!(plaintext, decrypted.as_slice());
+/// # Ok::<(), envcrypt::cipher::CipherError>(())
+/// ```
+#[cfg(feature = "cipher")]
+pub struct ChaCha20Poly1305;
+
+#[cfg(feature = "cipher")]
+impl Cipher for ChaCha20Poly1305 {
+    fn encrypt(&self, plaintext: &[u8], encryption_key: &[u8], _mac_key: &[u8]) -> Result<Vec<u8>, CipherError> {
+        // Validate key length
+        if encryption_key.len() != 32 {
+            return Err(CipherError::EncryptionFailed("Encryption key must be 32 bytes (256 bits)".to_string()));
+        }
+
+        // Generate random nonce (12 bytes for ChaCha20-Poly1305)
+        let nonce = generate_nonce_12();
+        
+        // Convert key to array
+        let key_array: [u8; 32] = encryption_key.try_into()
+            .map_err(|_| CipherError::EncryptionFailed("Invalid key length".to_string()))?;
+        
+        // Create cipher instance
+        let key = ChaChaKey::from_slice(&key_array);
+        let cipher = ChaCha20Poly1305Impl::new(key);
+        
+        // Encrypt with authentication
+        let nonce_array = ChaChaNonce::from_slice(&nonce);
+        let ciphertext = AeadTrait::encrypt(&cipher, nonce_array, plaintext)
+            .map_err(|e| CipherError::EncryptionFailed(format!("ChaCha20-Poly1305 encryption failed: {:?}", e)))?;
+        
+        // Combine: nonce + encrypted_data + tag
+        let mut output = Vec::with_capacity(nonce.len() + ciphertext.len());
+        output.extend_from_slice(&nonce);
+        output.extend_from_slice(&ciphertext);
+        
+        Ok(output)
+    }
+    
+    fn decrypt(&self, ciphertext: &[u8], encryption_key: &[u8], _mac_key: &[u8]) -> Result<Vec<u8>, CipherError> {
+        // Validate key length
+        if encryption_key.len() != 32 {
+            return Err(CipherError::DecryptionFailed);
+        }
+
+        // Validate minimum size: nonce (12) + tag (16) = 28 bytes
+        if ciphertext.len() < 28 {
+            return Err(CipherError::InvalidFormat);
+        }
+        
+        // Extract components
+        let nonce = &ciphertext[0..12];
+        let encrypted_data = &ciphertext[12..];
+        
+        // Convert key to array
+        let key_array: [u8; 32] = encryption_key.try_into()
+            .map_err(|_| CipherError::DecryptionFailed)?;
+        
+        // Create cipher instance
+        let key = ChaChaKey::from_slice(&key_array);
+        let cipher = ChaCha20Poly1305Impl::new(key);
+        
+        // Decrypt with authentication
+        let nonce_array = ChaChaNonce::from_slice(nonce);
+        let plaintext = AeadTrait::decrypt(&cipher, nonce_array, encrypted_data)
+            .map_err(|_| CipherError::MacVerificationFailed)?; // Poly1305 auth failure
+        
+        Ok(plaintext)
     }
 }
