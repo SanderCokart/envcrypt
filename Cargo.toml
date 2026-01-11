@@ -13,7 +13,7 @@ path = "src/main.rs"
 
 [features]
 default = ["cipher", "encrypt", "decrypt", "key-flag", "env-flag", "input-flag"]
-cipher = ["dep:aes", "dep:cbc", "dep:cipher", "dep:hmac", "dep:sha2", "dep:pbkdf2", "dep:rand", "dep:base64", "dep:generic-array"]
+cipher = ["dep:aes", "dep:cbc", "dep:cipher", "dep:hmac", "dep:sha2", "dep:pbkdf2", "dep:rand", "dep:base64", "dep:generic-array", "dep:zeroize", "dep:subtle"]
 encrypt = ["cipher", "dep:clap", "dep:rpassword", "dep:anyhow"]
 decrypt = ["cipher", "dep:clap", "dep:rpassword", "dep:anyhow"]
 key-flag = ["dep:rpassword"]
@@ -36,6 +36,8 @@ pbkdf2 = { version = "0.12", optional = true }
 rand = { version = "0.8", optional = true }
 base64 = { version = "0.21", optional = true }
 generic-array = { version = "0.14", optional = true }
+zeroize = { version = "1.7", optional = true }
+subtle = { version = "2.5", optional = true }
 
 [dev-dependencies]
 assert_cmd = "2.0"
