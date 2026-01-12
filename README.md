@@ -63,7 +63,7 @@ The install script will:
 - Add it to your PATH (in your shell config file on Linux/macOS, or user PATH on Windows)
 - Automatically refresh your shell configuration
 
-The `envcrypt` command will be immediately available after installation completes.
+**Note:** After installation, you may need to reload your terminal (close and reopen, or run `source ~/.bashrc` / `source ~/.zshrc` etc.) for the `envcrypt` command to be available in new terminal sessions. The install script will add `envcrypt` to your PATH in the current session, but for it to persist in future sessions, you'll need to reload your terminal.
 
 ### Alternative: Install from Local Repository
 
@@ -114,6 +114,45 @@ Or if you have the repository locally:
 cargo build --release
 # Binary will be at target/release/envcrypt
 ```
+
+### Uninstall
+
+To uninstall `envcrypt`:
+
+#### Linux/macOS
+
+Uninstall with a single command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/SanderCokart/envcrypt/main/install.sh | bash -s -- --uninstall
+```
+
+Or if you have the repository locally:
+
+```bash
+./install.sh --uninstall
+```
+
+#### Windows
+
+Uninstall with a single command:
+
+```powershell
+powershell -c "irm https://raw.githubusercontent.com/SanderCokart/envcrypt/main/install.ps1 | iex -s -- --uninstall"
+```
+
+Or if you have the repository locally:
+
+```powershell
+.\install.ps1 --uninstall
+```
+
+The uninstall script will:
+- Remove the `envcrypt` binary from `~/.envcrypt/bin/envcrypt` (Linux/macOS) or `%USERPROFILE%\.envcrypt\bin\envcrypt.exe` (Windows)
+- Remove the PATH configuration from your shell config file (Linux/macOS) or user PATH (Windows)
+- Remove the `.envcrypt` directory if it's empty
+
+**Note:** You may need to restart your terminal for PATH changes to take effect after uninstallation.
 
 ## Quick Start
 
