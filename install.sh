@@ -109,7 +109,13 @@ download_binary() {
         return 1
     fi
     
-    local binary_name="envcrypt-${version}-${platform}"
+    # Determine binary extension based on platform
+    local binary_ext=""
+    if [[ "$platform" == windows-* ]]; then
+        binary_ext=".exe"
+    fi
+    
+    local binary_name="envcrypt-${version}-${platform}${binary_ext}"
     local download_url="https://github.com/${ENVCRYPT_REPO}/releases/download/v${version}/${binary_name}"
     local temp_file
     

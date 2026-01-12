@@ -7,8 +7,8 @@ on:
 
 jobs:
   build:
-    name: Build for ${{ matrix.os }-${{ matrix.arch }}}
-    runs-on: ubuntu-latest
+    name: Build for ${{ matrix.os }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.runs-on }}
     strategy:
       matrix:
         include:
@@ -16,17 +16,48 @@ jobs:
             arch: x86_64
             target: x86_64-unknown-linux-musl
             binary_name: envcrypt
+            binary_ext: ""
+            runs-on: ubuntu-latest
+          - os: darwin
+            arch: x86_64
+            target: x86_64-apple-darwin
+            binary_name: envcrypt
+            binary_ext: ""
+            runs-on: macos-latest
+          - os: darwin
+            arch: aarch64
+            target: aarch64-apple-darwin
+            binary_name: envcrypt
+            binary_ext: ""
+            runs-on: macos-latest
+          - os: windows
+            arch: x86_64
+            target: x86_64-pc-windows-msvc
+            binary_name: envcrypt
+            binary_ext: .exe
+            runs-on: windows-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install musl target
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install musl target (Linux only)
+        if: matrix.os == 'linux'
         run: rustup target add ${{ matrix.target }}
 
-      - name: Install musl-tools
+      - name: Install musl-tools (Linux only)
+        if: matrix.os == 'linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools
+
+      - name: Install cross-compilation targets (macOS only)
+        if: matrix.os == 'darwin'
+        run: rustup target add ${{ matrix.target }}
 
       - name: Build release binary
         run: |
@@ -34,6 +65,7 @@ jobs:
 
       - name: Extract version from tag
         id: version
+        shell: bash
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
@@ -41,15 +73,24 @@ jobs:
 
       - name: Prepare binary name
         id: binary_name
+        shell: bash
         run: |
-          BINARY_NAME="envcrypt-${{ steps.version.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}"
+          BINARY_NAME="envcrypt-${{ steps.version.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.binary_ext }}"
           echo "binary_name=$BINARY_NAME" >> $GITHUB_OUTPUT
           echo "Binary name: $BINARY_NAME"
 
-      - name: Copy and rename binary
+      - name: Copy and rename binary (Linux/macOS)
+        if: matrix.os == 'linux' || matrix.os == 'darwin'
+        shell: bash
         run: |
-          cp target/${{ matrix.target }}/release/envcrypt ${{ steps.binary_name.outputs.binary_name }}
+          cp target/${{ matrix.target }}/release/${{ matrix.binary_name }}${{ matrix.binary_ext }} ${{ steps.binary_name.outputs.binary_name }}
           chmod +x ${{ steps.binary_name.outputs.binary_name }}
+
+      - name: Copy and rename binary (Windows)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          Copy-Item "target\${{ matrix.target }}\release\${{ matrix.binary_name }}${{ matrix.binary_ext }}" "${{ steps.binary_name.outputs.binary_name }}"
 
       - name: Upload to release
         uses: softprops/action-gh-release@v1

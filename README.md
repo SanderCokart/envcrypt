@@ -31,18 +31,36 @@ A secure command-line tool for encrypting and decrypting environment files using
 
 ### Quick Install (Recommended)
 
+#### Linux/macOS
+
 Install with a single command:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/SanderCokart/envcrypt/main/install.sh | bash
 ```
 
+#### Windows
+
+Install with a single command:
+
+```powershell
+powershell -c "irm https://raw.githubusercontent.com/SanderCokart/envcrypt/main/install.ps1 | iex"
+```
+
+Or if you have execution policy restrictions:
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/SanderCokart/envcrypt/main/install.ps1 | iex"
+```
+
 The install script will:
 - Automatically detect your platform (OS and architecture)
 - Download the latest pre-built binary from GitHub Releases (if available)
 - Fall back to building from source if no binary is available (requires Rust)
-- Install it to `~/.envcrypt/bin/envcrypt`
-- Add it to your PATH (in your shell config file)
+- Install it to:
+  - Linux/macOS: `~/.envcrypt/bin/envcrypt`
+  - Windows: `%USERPROFILE%\.envcrypt\bin\envcrypt.exe`
+- Add it to your PATH (in your shell config file on Linux/macOS, or user PATH on Windows)
 - Automatically refresh your shell configuration
 
 The `envcrypt` command will be immediately available after installation completes.
@@ -51,15 +69,28 @@ The `envcrypt` command will be immediately available after installation complete
 
 If you've cloned the repository locally:
 
+**Linux/macOS:**
 ```bash
 ./install.sh
 ```
 
+**Windows:**
+```powershell
+.\install.ps1
+```
+
 The script will automatically detect the GitHub repository from the git remote. Otherwise, you can set the `ENVCRYPT_REPO` environment variable:
 
+**Linux/macOS:**
 ```bash
 export ENVCRYPT_REPO="SanderCokart/envcrypt"
 ./install.sh
+```
+
+**Windows:**
+```powershell
+$env:ENVCRYPT_REPO = "SanderCokart/envcrypt"
+.\install.ps1
 ```
 
 ### Prerequisites
