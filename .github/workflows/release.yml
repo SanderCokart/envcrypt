@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    name: Build for ${{ matrix.os }-${{ matrix.arch }}}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: x86_64
+            target: x86_64-unknown-linux-musl
+            binary_name: envcrypt
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install musl target
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Install musl-tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Build release binary
+        run: |
+          cargo build --release --target ${{ matrix.target }}
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Prepare binary name
+        id: binary_name
+        run: |
+          BINARY_NAME="envcrypt-${{ steps.version.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}"
+          echo "binary_name=$BINARY_NAME" >> $GITHUB_OUTPUT
+          echo "Binary name: $BINARY_NAME"
+
+      - name: Copy and rename binary
+        run: |
+          cp target/${{ matrix.target }}/release/envcrypt ${{ steps.binary_name.outputs.binary_name }}
+          chmod +x ${{ steps.binary_name.outputs.binary_name }}
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ steps.binary_name.outputs.binary_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

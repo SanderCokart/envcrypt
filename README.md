@@ -29,24 +29,48 @@ A secure command-line tool for encrypting and decrypting environment files using
 
 ## Installation
 
-### Prerequisites
+### Quick Install (Recommended)
 
-- **Rust and Cargo**: The install script requires Rust and Cargo to be installed. If you don't have Rust installed, you can install it from [rustup.rs](https://rustup.rs/).
+Install with a single command:
 
-### From Source
-
-1. Build and install:
 ```bash
-./install.sh
+curl -fsSL https://raw.githubusercontent.com/SanderCokart/envcrypt/main/install.sh | bash
 ```
 
 The install script will:
-- Build the release binary
+- Automatically detect your platform (OS and architecture)
+- Download the latest pre-built binary from GitHub Releases (if available)
+- Fall back to building from source if no binary is available (requires Rust)
 - Install it to `~/.envcrypt/bin/envcrypt`
 - Add it to your PATH (in your shell config file)
 - Automatically refresh your shell configuration
 
 The `envcrypt` command will be immediately available after installation completes.
+
+### Alternative: Install from Local Repository
+
+If you've cloned the repository locally:
+
+```bash
+./install.sh
+```
+
+The script will automatically detect the GitHub repository from the git remote. Otherwise, you can set the `ENVCRYPT_REPO` environment variable:
+
+```bash
+export ENVCRYPT_REPO="SanderCokart/envcrypt"
+./install.sh
+```
+
+### Prerequisites
+
+- **For pre-built binaries**: No prerequisites needed! The install script will download the binary automatically.
+- **For building from source**: Rust and Cargo are required. If you don't have Rust installed, you can install it from [rustup.rs](https://rustup.rs/).
+
+The install script will automatically fall back to building from source if:
+- No pre-built binary is available for your platform
+- The download fails
+- The GitHub repository is not configured
 
 ### Using Cargo
 
