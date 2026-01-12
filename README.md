@@ -135,21 +135,13 @@ Or if you have the repository locally:
 
 #### Windows
 
-Uninstall with a single command:
+Windows uninstall script coming soon.
 
-```powershell
-powershell -c "irm https://raw.githubusercontent.com/SanderCokart/envcrypt/main/install.ps1 | iex -s -- --uninstall"
-```
-
-Or if you have the repository locally:
-
-```powershell
-.\install.ps1 --uninstall
-```
+#### Linux/macOS
 
 The uninstall script will:
-- Remove the `envcrypt` binary from `~/.envcrypt/bin/envcrypt` (Linux/macOS) or `%USERPROFILE%\.envcrypt\bin\envcrypt.exe` (Windows)
-- Remove the PATH configuration from your shell config file (Linux/macOS) or user PATH (Windows)
+- Remove the `envcrypt` binary from `~/.envcrypt/bin/envcrypt`
+- Remove the PATH configuration from your shell config file
 - Remove the `.envcrypt` directory if it's empty
 
 **Note:** You may need to restart your terminal for PATH changes to take effect after uninstallation.

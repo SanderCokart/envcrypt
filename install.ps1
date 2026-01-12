@@ -284,7 +284,8 @@ function Install-Envcrypt {
 }
 
 # Main script logic
-if ($Uninstall) {
+# Check for --uninstall as a positional argument or environment variable (for compatibility with piping from web)
+if ($args -contains "--uninstall" -or $Uninstall -or $env:ENVCRYPT_UNINSTALL -eq "1") {
     Uninstall-Envcrypt
 } else {
     Install-Envcrypt
