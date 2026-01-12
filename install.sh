@@ -356,17 +356,6 @@ install() {
         echo "✓ envcrypt was installed successfully to $tilde_exe"
     fi
     
-    # Add to PATH in current session immediately
-    export ENVCRYPT_HOME
-    export PATH="$BIN_DIR:$PATH"
-    
-    # Check if envcrypt is already available in PATH
-    if command -v envcrypt >/dev/null 2>&1; then
-        echo ""
-        echo "Run 'envcrypt --help' to get started"
-        exit 0
-    fi
-    
     # Automatically add ~/.envcrypt/bin to PATH
     CONFIG_FILE=$(detect_shell_config)
     SHELL_NAME=$(basename "$SHELL" 2>/dev/null || echo "bash")
@@ -377,7 +366,7 @@ install() {
     
     # Check if PATH export already exists in config file
     if [ -f "$CONFIG_FILE" ] && grep -q "# envcrypt" "$CONFIG_FILE" 2>/dev/null; then
-        # Already configured
+        # Already configured in config file
         :
     else
         # Add PATH export to config file if writable
@@ -408,6 +397,19 @@ install() {
                 echo "  export PATH=\"\$ENVCRYPT_HOME/bin:\$PATH\""
             fi
         fi
+    fi
+    
+    # Add to PATH in current session immediately
+    export ENVCRYPT_HOME
+    export PATH="$BIN_DIR:$PATH"
+    
+    # Check if envcrypt is now available in PATH
+    if command -v envcrypt >/dev/null 2>&1; then
+        echo ""
+        echo "Run 'envcrypt --help' to get started"
+    else
+        echo ""
+        echo "Warning: envcrypt is not available in PATH. You may need to restart your terminal."
     fi
     
     # Determine refresh command based on shell
